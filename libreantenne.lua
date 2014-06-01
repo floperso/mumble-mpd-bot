@@ -19,7 +19,9 @@ local interrupt_sounds = false
 -- Boolean if the bot should move into the user's channel to play the sound
 local should_move = false
 
+----------------------------------------------------------------------
 -- Table with keys being the keywords and values being the sound files
+----------------------------------------------------------------------
 local sounds = {
     tvois = "tvois.ogg",
     chaud1 = "chaud1.ogg",
@@ -59,6 +61,10 @@ local sounds = {
     yeux2 = "baisse_les_yeux.ogg",
     nice = "nice.ogg"
 }
+
+----------------------------------------------------------------------
+-- commands array
+----------------------------------------------------------------------
 local commands = {
 	setvol = "setvol",
 	v = "volume",
@@ -78,18 +84,138 @@ local commands = {
 	song = "song"
 }
 
+----------------------------------------------------------------------
+-- global configuration variables
+----------------------------------------------------------------------
+local configuration_file="./bot.conf"
+local flags = {
+        debug = "",         -- debug flags -> integer
+        irc_server = "",    -- irc server address -> IP or DNS
+        irc_port = "",      -- irc server port -> integer 2**16   
+        irc_chan = "",      -- irc chan -> string
+        mpd_server = "",    -- mpd server address -> IP or DNS
+        mpd_port = "",      -- mpd port -> integer 2**16
+        mumble_server = "", -- mumble server address -> IP or DNS
+        mumble_port = "",   -- mumble port -> integer 2**16
+        mumble_chan = ""    -- mumble chan -> string
+}
+
 local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
 local msg_suffix = "&nbsp;-&nbsp;&#x266B;</span>"
 
+----------------------------------------------------------------------
 -- Sound file path prefix
+----------------------------------------------------------------------
 local prefix = "jingles/"
 local mpd_connect = mpd_connect
----------------
+
+----------------------------------------------------------------------
+-- piepan functions
+----------------------------------------------------------------------
 function piepan.onConnect()
     if piepan.args.soundboard then
         prefix = piepan.args.soundboard
     end
     print ("Bridgitte chargée")
+end
+
+----------------------------------------------------------------------
+-- added to check files existance from:
+-- https://stackoverflow.com/questions/4990990/lua-check-if-a-file-exists
+----------------------------------------------------------------------
+function file_exists(name)
+   local f=io.open(name,"r")
+   if f~=nil then io.close(f) return true else return false end
+end
+
+----------------------------------------------------------------------
+-- parseConfiguration function, no arguments 
+----------------------------------------------------------------------
+function parseConfiguration ()
+	if (file_exists) then
+        	local file = assert(io.open(configuration_file, "r"))
+        	local line = file:read()
+        	local term = {}
+	else
+		return
+	fi
+
+        for line in file:lines()
+        do
+                local i = 0
+                if not (string.match(line,'^#') or  
+                        string.match(line,'^$'))
+                then
+                        for word in string.gmatch(line, '([^ ]+)')
+                        do
+                                term[i] = word
+                                i=i+1
+                        end
+                        setConfiguration(term)
+                end
+        end
+end
+
+function setConfiguration (array)
+        if (string.match(array[0], "debug") and
+            array[1]~='' and
+            string.match(array[1],"%d+")) then
+                flags["debug"] = tonumber(array[1])
+
+        elseif (string.match(array[0], 'irc') and
+                string.match(array[1], 'server') and
+                array[2]~='') then
+                flags["irc_server"] = array[2]
+
+        elseif (string.match(array[0], 'irc') and
+                string.match(array[1], 'port') and
+                array[2]~='' and
+                string.match(array[2],"%d+")) then
+                if (tonumber(array[2])>0 and
+                    tonumber(array[2])<65536)
+                then
+                        flags["irc_port"] = tonumber(array[2])
+                end
+	elseif (string.match(array[0], 'irc') and
+                string.match(array[1], 'chan') and
+                array[2]~='') then
+                flags["irc_chan"] = array[2]
+
+        elseif (string.match(array[0], 'mumble') and
+                string.match(array[1], 'server') and
+                array[2]~='') then
+                flags["mumble_server"] = array[2]
+
+        elseif (string.match(array[0], 'mumble') and
+                string.match(array[1], 'port') and
+                array[2]~='' and
+                string.match(array[2], "%d+")) then
+                if (tonumber(array[2])>0 and
+                    tonumber(array[2])<65536)
+                then
+                        flags["mumble_port"] = tonumber(array[2])
+                end
+
+        elseif (string.match(array[0], 'mumble') and
+                string.match(array[1], 'chan') and
+                array[2]~='')
+        then
+		flags["mumble_chan"]=array[2]
+
+        end
+end
+
+function piepan.setConfiguration () 
+	if file_exists (configuration_file) 
+		local file = assert(io.open(configuration_file, "r"))
+		local t = file:read()
+		file.close()
+		for line in file:lines() do
+			
+		end
+	else
+		print ("Configuration not found.")
+	end
 end
 
 function string:split(sep)
@@ -201,7 +327,7 @@ function piepan.youtubedl_completed(info)
 end
 
 function piepan.fadevol(dest)
-	client = piepan.MPD.mpd_connect("212.129.4.80",6600,true)
+	client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	print("fadevol dest = " .. tostring(dest))
 	vol = tonumber(client:status()['volume'])
 	delta = 1
@@ -256,7 +382,7 @@ function piepan.onMessage(msg)
     end
     if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
 	c = commands[search]
-	client = piepan.MPD.mpd_connect("212.129.4.80",6600,true)
+	client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	if("setvol" == c) then
 		vol = tonumber(string.sub(msg.text,8))
 		vol = math.max(0,math.min(100,vol))
