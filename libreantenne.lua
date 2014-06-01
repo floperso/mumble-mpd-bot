@@ -57,7 +57,8 @@ local sounds = {
     combat = "combat_himi.ogg",
     yeux1 = "yeux_ciel.ogg",
     yeux2 = "baisse_les_yeux.ogg",
-    nice = "nice.ogg"
+    nice = "nice.ogg",
+    bienvenue1 = "bienvenue_triskel.ogg"
 }
 local commands = {
 	setvol = "setvol",
@@ -78,7 +79,8 @@ local commands = {
 	song = "song"
 }
 
-local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
+-- violet local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
+local msg_prefix = "<span style='color:#384'>&#x266B;&nbsp;-&nbsp;"
 local msg_suffix = "&nbsp;-&nbsp;&#x266B;</span>"
 
 -- Sound file path prefix
@@ -99,16 +101,34 @@ function string:split(sep)
         return fields
 end
 
+function piepan.splitPlain(s, delim)
+  assert (type (delim) == "string" and string.len (delim) > 0,
+          "bad delimiter : " .. delim)
+  local start = 1
+  local t = {}  -- results table
+  -- find each instance of a string followed by the delimiter
+  while true do
+    local pos = string.find (s, delim, start, true) -- plain find
+    if not pos then break end
+    table.insert (t, string.sub (s, start, pos - 1))
+    start = pos + string.len (delim)
+  end -- while
+  -- insert final one (after last delimiter)
+  table.insert (t, string.sub (s, start))
+  return t
+
+end -- function split
+
 function piepan.formatSong(song)
 	print("formatSong : ")
 	piepan.showtable(song)
-	s = ''
-	if(song['Artist']) then s = s .. song['Artist'] .. ' - ' end
-	if(song['Album']) then s = s .. song['Album'] .. ' - ' end 
-	if(song['Title']) then s = s .. song['Title'] end
-	if(song['Date']) then s = s .. ' (' .. song['Date'] .. ')' end
-	if('' == s) then s = song['file'] end
-	return s
+	ret = ''
+	if(song['Artist']) then ret = ret .. song['Artist'] .. ' - ' end
+	if(song['Album']) then ret = ret .. song['Album'] .. ' - ' end 
+	if(song['Title']) then ret = ret .. song['Title'] end
+	if(song['Date']) then ret = ret .. ' (' .. song['Date'] .. ')' end
+	if('' == ret) then ret = song['file'] end
+	return ret
 end
 
 function piepan.trim(s)
@@ -198,6 +218,11 @@ function piepan.youtubedl(url)
 end
 function piepan.youtubedl_completed(info)
 	print("youtubedl_completed " .. (info or '?'))
+end
+
+function piepan.formatClock(timestamp)
+	timestamp = tonumber(timestamp)
+	return string.format("%.2d:%.2d:%.2d", timestamp/(60*60), timestamp/60%60, timestamp%60)
 end
 
 function piepan.fadevol(dest)
@@ -329,7 +354,6 @@ function piepan.onMessage(msg)
 		s = s .. "<li>#v- : Diminue le volume de 5% par '-'</li>"
 		s = s .. "<li>#next, #last, #prev, #play, #pause : Contrôles de lecture</li>"
 		s = s .. "<li>#random 0/1, #consume 0/1 : Change les modes de lecture</li>"
-		
 		s = s .. "</ul></pre>"
 		piepan.me.channel:send(s)
 	elseif("volume" == c) then
@@ -338,24 +362,19 @@ function piepan.onMessage(msg)
 	elseif ("song" == c) then
 		print("Sending song info ...")
 		song = client:currentsong()
-		s = client:status()
-		print("Volume : " .. s['volume'])
+		status = client:status()
+		print("Volume : " .. status['volume'])
 		piepan.showtable(s)
-		-- piepan.printtable(song)
-		-- piepan.printtable(s)
-		-- print("Status : " .. s) 
 		tstr = ''
-		if(s['time']) then
-			t = s['time'].split(':')
-			print("Time : " .. s['time'])
-			piepan.showtable(t)
-			-- tstr = '[' .. t[1]
-			-- tstr = tstr .. ' / ' .. t[2] .. ']'
-			tstr = tostring(s['time'])
+		if(status['time']) then
+			time_pair = piepan.splitPlain(status['time'],':')
+			-- print("Time : " .. status['time'] .. tostring(time_pair[1]))
+			tstr = '[' .. piepan.formatClock(time_pair[1])
+			tstr = tstr .. ' / ' .. piepan.formatClock(time_pair[2]) .. ']'
 		end
 		summary = piepan.formatSong(song)
 		
-		ret = summary .. ' - ' .. tstr .. ' [vol ' .. tostring(s['volume']) .. '% R' .. (s['random'] or '?') .. ' C' .. (s['consume'] or '?') .. ']'
+		ret = summary .. ' - ' .. tstr .. ' [vol ' .. tostring(status['volume']) .. '% R' .. (status['random'] or '?') .. ' C' .. (status['consume'] or '?') .. ']'
 		-- msg.user:send(ret)
 		print("Summary : " .. ret)
 		piepan.me.channel:send(msg_prefix .. ret .. msg_suffix)
