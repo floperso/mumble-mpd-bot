@@ -1,12 +1,9 @@
---
--- Soundboard example.
---
--- Sounds are triggered when #<keyword> appears in a text message, where
--- keyword has been defined below in the sounds table.
+----------------------------------------------------------------------
+-- Mumble/IRC/MPD bot with lua
 --
 -- require "socket"
 -- require "mpd"
-
+----------------------------------------------------------------------
 
 -- local mpd = mpd
 
@@ -19,79 +16,243 @@ local interrupt_sounds = false
 -- Boolean if the bot should move into the user's channel to play the sound
 local should_move = false
 
+----------------------------------------------------------------------
 -- Table with keys being the keywords and values being the sound files
+----------------------------------------------------------------------
 local sounds = {
-    tvois = "tvois.ogg",
-    chaud1 = "chaud1.ogg",
-    chaud2 = "chaud2.ogg",
-    chaud3 = "chaud3.ogg",
-    chaud4 = "chaud4.ogg",
-    chaud5 = "chaud5.ogg",
-    chaud6 = "chaud_himi2.ogg",
-    chaud7 = "chaud_est.ogg",
-    quoinon = "quoi_non.ogg",
-    cage = "cage.ogg",
-    enerve = "enerve.ogg",
-    fouet1 = "fouet1.ogg",
-    fouet2 = "fouet2.ogg",
-    pantalon= "pantalon.ogg",
-    pantalon2= "pantalon2.ogg",
-    rappelons1 = "merde.ogg",
-    rappelons2 = "enfants.ogg",
-    rappelons3 = "enfants2.ogg",
-    radiobatard1 = "radio_batard.ogg",
-    radiobatard2 = "radio_batard2.ogg",
-    ohoo = "ohoo.ogg",
-    paspossible = "pas_possible.ogg",
-    microco = "micro_co.ogg",
-    fdp = "fdp.ogg",
-    chagasse = "chagasse.ogg",
-    sodo = "sodo.ogg",
-    faim = "faim.ogg",
-    rire1 = "rire_crack.ogg",
-    shoote = "shoot.ogg",
-    flo1 = "flo1.ogg",
-    flo2 = "bonjour_flo2.ogg",
-    mens = "menstruations.ogg",
-    re = "re.ogg",
-    combat = "combat_himi.ogg",
-    yeux1 = "yeux_ciel.ogg",
-    yeux2 = "baisse_les_yeux.ogg",
-    nice = "nice.ogg"
+   tvois = "tvois.ogg",
+   chaud1 = "chaud1.ogg",
+   chaud2 = "chaud2.ogg",
+   chaud3 = "chaud3.ogg",
+   chaud4 = "chaud4.ogg",
+   chaud5 = "chaud5.ogg",
+   chaud6 = "chaud_himi2.ogg",
+   chaud7 = "chaud_est.ogg",
+   quoinon = "quoi_non.ogg",
+   cage = "cage.ogg",
+   enerve = "enerve.ogg",
+   fouet1 = "fouet1.ogg",
+   fouet2 = "fouet2.ogg",
+   pantalon= "pantalon.ogg",
+   pantalon2= "pantalon2.ogg",
+   rappelons1 = "merde.ogg",
+   rappelons2 = "enfants.ogg",
+   rappelons3 = "enfants2.ogg",
+   radiobatard1 = "radio_batard.ogg",
+   radiobatard2 = "radio_batard2.ogg",
+   ohoo = "ohoo.ogg",
+   paspossible = "pas_possible.ogg",
+   microco = "micro_co.ogg",
+   fdp = "fdp.ogg",
+   chagasse = "chagasse.ogg",
+   sodo = "sodo.ogg",
+   faim = "faim.ogg",
+   rire1 = "rire_crack.ogg",
+   shoote = "shoot.ogg",
+   flo1 = "flo1.ogg",
+   flo2 = "bonjour_flo2.ogg",
+   mens = "menstruations.ogg",
+   re = "re.ogg",
+   combat = "combat_himi.ogg",
+   yeux1 = "yeux_ciel.ogg",
+   yeux2 = "baisse_les_yeux.ogg",
+   nice = "nice.ogg"
 }
+
+----------------------------------------------------------------------
+-- commands array
+----------------------------------------------------------------------
 local commands = {
-	setvol = "setvol",
-	v = "volume",
-	volume = "volume",
-	youtube = "youtube",
-	y = "youtube",
-	last = "last",
-	next = "next",
-	prev = "prev",
-	play = "play",
-	pause = "pause",
-	s = "song",
-	random = "random",
-	consume = "consume",
-	help = "help",
-	fadevol = "fadevol",
-	song = "song"
+   setvol = "setvol",
+   v = "volume",
+   volume = "volume",
+   youtube = "youtube",
+   y = "youtube",
+   last = "last",
+   next = "next",
+   prev = "prev",
+   play = "play",
+   pause = "pause",
+   s = "song",
+   random = "random",
+   consume = "consume",
+   help = "help",
+   fadevol = "fadevol",
+   song = "song"
+}
+
+----------------------------------------------------------------------
+-- global configuration variables
+----------------------------------------------------------------------
+local configuration_file="./bot.conf"
+local flags = {
+   debug = "",         -- debug flags -> integer
+   irc_server = "",    -- irc server address -> IP or DNS
+   irc_port = "",      -- irc server port -> integer 2**16   
+   irc_chan = "",      -- irc chan -> string
+   mpd_server = "",    -- mpd server address -> IP or DNS
+   mpd_port = "",      -- mpd port -> integer 2**16
+   mumble_server = "", -- mumble server address -> IP or DNS
+   mumble_port = "",   -- mumble port -> integer 2**16
+   mumble_chan = ""    -- mumble chan -> string
 }
 
 local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
 local msg_suffix = "&nbsp;-&nbsp;&#x266B;</span>"
 
+----------------------------------------------------------------------
 -- Sound file path prefix
+----------------------------------------------------------------------
 local prefix = "jingles/"
 local mpd_connect = mpd_connect
----------------
+
+----------------------------------------------------------------------
+-- piepan functions
+----------------------------------------------------------------------
 function piepan.onConnect()
-    if piepan.args.soundboard then
-        prefix = piepan.args.soundboard
-    end
-    print ("Bridgitte chargée")
+   if piepan.args.soundboard then
+      prefix = piepan.args.soundboard
+   end
+   print ("Bridgitte chargée")
+   print ("Loading configuration...")
+   if (parseConfiguration())
+   then
+      print("ok.")
+   else
+      print("error.")
+   end
 end
 
+----------------------------------------------------------------------
+-- added to check files existance from:
+-- https://stackoverflow.com/questions/4990990/lua-check-if-a-file-exists
+----------------------------------------------------------------------
+function file_exists(name)
+   local f = io.open(name,"r")
+   if (f~=nil)
+   then io.close(f) 
+      return true 
+   else 
+      return false 
+   end
+end
+
+----------------------------------------------------------------------
+-- parseConfiguration function, no arguments 
+----------------------------------------------------------------------
+function parseConfiguration ()
+   if (file_exists(configuration_file)) then
+      local file = assert(io.open(configuration_file, "r"))
+      local line = file:read()
+      local term = {}
+   else
+      return false
+   end
+      
+   for line in file:lines()
+   do
+      local i = 0
+      if not (string.match(line,'^#') or  
+	      string.match(line,'^$'))
+      then
+	 for word in string.gmatch(line, '([^ ]+)')
+	 do
+	    term[i] = word
+	    i=i+1
+	 end
+	 setConfiguration(term)
+      end
+   end
+   return true
+end
+
+----------------------------------------------------------------------
+-- setConfiguration with defined terms into flags array.
+----------------------------------------------------------------------
+function setConfiguration (array)
+   -- debug configuration flags
+   if (string.match(array[0], "debug") and
+       array[1]~='' and
+       string.match(array[1],"%d+")) 
+   then
+      flags["debug"] = tonumber(array[1])
+
+   -- irc server configuration flags
+   elseif (string.match(array[0], 'irc') and
+	   string.match(array[1], 'server') and
+	   array[2]~='') 
+   then
+      flags["irc_server"] = array[2]
+
+   -- irc port configuration flags
+   elseif (string.match(array[0], 'irc') and
+	   string.match(array[1], 'port') and
+	   array[2]~='' and
+	   string.match(array[2],"%d+")) 
+   then
+      if (tonumber(array[2])>0 and
+	  tonumber(array[2])<65536)
+      then
+	 flags["irc_port"]=tonumber(array[2])
+      end
+
+   -- irc chan configuration flags
+   elseif (string.match(array[0], 'irc') and
+	   string.match(array[1], 'chan') and
+	   array[2]~='') 
+   then
+      flags["irc_chan"]=array[2]
+      
+   -- mumble server configuration flag
+   elseif (string.match(array[0], 'mumble') and
+	   string.match(array[1], 'server') and
+	   array[2]~='') 
+   then
+      flags["mumble_server"]=array[2]
+   
+   -- mumble port configuration flag
+   elseif (string.match(array[0], 'mumble') and
+	   string.match(array[1], 'port') and
+	   array[2]~='' and
+	   string.match(array[2], "%d+")) 
+   then
+      if (tonumber(array[2])>0 and
+	  tonumber(array[2])<65536)
+      then
+	 flags["mumble_port"]=tonumber(array[2])
+      end
+   
+   -- mumble chan configuration flag
+   elseif (string.match(array[0], 'mumble') and
+	   string.match(array[1], 'chan') and
+	   array[2]~='')
+   then
+      flags["mumble_chan"]=array[2]
+   
+   -- mpd server configuration flag
+   elseif (string.match(array[0], 'mpd') and
+	   string.match(array[1], 'server') and
+	   array[2]~='') 
+   then
+      flags["mpd_server"]=array[2]
+   
+   -- mpd port configuration flag
+   elseif (string.match(array[0], 'mpd') and
+	   string.match(array[1], 'port') and
+	   array[2]~='' and
+	   string.match(array[2], "%d+"))
+   then
+      if (tonumber(array[2])>0 and
+	  tonumber(array[2])<65536)
+      then
+	 flags["mpd_port"]=tonumber(array[2])
+      end
+   end
+end
+
+----------------------------------------------------------------------
+-- split function
+----------------------------------------------------------------------
 function string:split(sep)
         local sep, fields = sep or ":", {}
         local pattern = string.format("([^%s]+)", sep)
@@ -99,6 +260,9 @@ function string:split(sep)
         return fields
 end
 
+----------------------------------------------------------------------
+-- formatSong function
+----------------------------------------------------------------------
 function piepan.formatSong(song)
 	print("formatSong : ")
 	piepan.showtable(song)
@@ -111,11 +275,16 @@ function piepan.formatSong(song)
 	return s
 end
 
-function piepan.trim(s)
+----------------------------------------------------------------------
 -- from PiL2 20.4
+----------------------------------------------------------------------
+function piepan.trim(s)
 	return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
+----------------------------------------------------------------------
+-- function url_encode
+----------------------------------------------------------------------
 function piepan.url_encode(str)
   if (str) then
     str = string.gsub (str, "\n", "\r\n")
@@ -126,31 +295,50 @@ function piepan.url_encode(str)
   return str	
 end
 
+----------------------------------------------------------------------
+-- function show tables
+----------------------------------------------------------------------
 function piepan.showtable(t)
 	for key,value in pairs(t) do
 		print("Found member " .. key);
 	end
 end
 
+----------------------------------------------------------------------
+-- function tablelenth
+----------------------------------------------------------------------
 function piepan.tablelength(T)
 	local count = 0
 	for _ in pairs(T) do count = count + 1 end
 	return count
 end
 
+----------------------------------------------------------------------
+-- function starts
+----------------------------------------------------------------------
 function string.starts(String,Start)
    return string.sub(String,1,string.len(Start))==Start
 end
 
+----------------------------------------------------------------------
+-- function string.end
+----------------------------------------------------------------------
 function string.ends(String,End)
    return End=='' or string.sub(String,-string.len(End))==End
 end
 
+----------------------------------------------------------------------
+-- function countsubstring
+----------------------------------------------------------------------
 function piepan.countsubstring( s1, s2 )
  local magic =  "[%^%$%(%)%%%.%[%]%*%+%-%?]"
  local percent = function(s)return "%"..s end
     return select( 2, s1:gsub( s2:gsub(magic,percent), "" ) )
 end
+
+----------------------------------------------------------------------
+-- function youtubedl
+----------------------------------------------------------------------
 function piepan.youtubedl(url)
 	n1,n2 = string.find(url,' ')
 	if(n1) then
@@ -196,12 +384,19 @@ function piepan.youtubedl(url)
 		-- piepan.me.channel:send(output)
 	end
 end
+
+----------------------------------------------------------------------
+-- function youtubedl_completed
+----------------------------------------------------------------------
 function piepan.youtubedl_completed(info)
 	print("youtubedl_completed " .. (info or '?'))
 end
 
+----------------------------------------------------------------------
+-- function fadevol
+----------------------------------------------------------------------
 function piepan.fadevol(dest)
-	client = piepan.MPD.mpd_connect("212.129.4.80",6600,true)
+	client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	print("fadevol dest = " .. tostring(dest))
 	vol = tonumber(client:status()['volume'])
 	delta = 1
@@ -221,10 +416,17 @@ function piepan.fadevol(dest)
 	end
 	piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
 end
+
+----------------------------------------------------------------------
+-- function fadevol_completed
+----------------------------------------------------------------------
 function piepan.fadevol_completed(info)
 	print("fadevol_completed " .. (info or '?'))
 end
 
+----------------------------------------------------------------------
+-- function onMessage
+----------------------------------------------------------------------
 function piepan.onMessage(msg)
     if msg.user == nil then
         return
@@ -256,7 +458,7 @@ function piepan.onMessage(msg)
     end
     if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
 	c = commands[search]
-	client = piepan.MPD.mpd_connect("212.129.4.80",6600,true)
+	client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	if("setvol" == c) then
 		vol = tonumber(string.sub(msg.text,8))
 		vol = math.max(0,math.min(100,vol))
@@ -361,5 +563,4 @@ function piepan.onMessage(msg)
 		piepan.me.channel:send(msg_prefix .. ret .. msg_suffix)
 	end
     end
-
 end
