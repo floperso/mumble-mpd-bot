@@ -1,12 +1,9 @@
---
--- Soundboard example.
---
--- Sounds are triggered when #<keyword> appears in a text message, where
--- keyword has been defined below in the sounds table.
+----------------------------------------------------------------------
+-- Mumble/IRC/MPD bot with lua
 --
 -- require "socket"
 -- require "mpd"
-
+----------------------------------------------------------------------
 
 -- local mpd = mpd
 
@@ -156,6 +153,9 @@ function parseConfiguration ()
         end
 end
 
+----------------------------------------------------------------------
+-- setConfiguration with defined terms into flags array.
+----------------------------------------------------------------------
 function setConfiguration (array)
         if (string.match(array[0], "debug") and
             array[1]~='' and
@@ -205,19 +205,9 @@ function setConfiguration (array)
         end
 end
 
-function piepan.setConfiguration () 
-	if file_exists (configuration_file) 
-		local file = assert(io.open(configuration_file, "r"))
-		local t = file:read()
-		file.close()
-		for line in file:lines() do
-			
-		end
-	else
-		print ("Configuration not found.")
-	end
-end
-
+----------------------------------------------------------------------
+-- split function
+----------------------------------------------------------------------
 function string:split(sep)
         local sep, fields = sep or ":", {}
         local pattern = string.format("([^%s]+)", sep)
@@ -225,6 +215,9 @@ function string:split(sep)
         return fields
 end
 
+----------------------------------------------------------------------
+-- formatSong function
+----------------------------------------------------------------------
 function piepan.formatSong(song)
 	print("formatSong : ")
 	piepan.showtable(song)
@@ -237,11 +230,16 @@ function piepan.formatSong(song)
 	return s
 end
 
-function piepan.trim(s)
+----------------------------------------------------------------------
 -- from PiL2 20.4
+----------------------------------------------------------------------
+function piepan.trim(s)
 	return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
+----------------------------------------------------------------------
+-- function url_encode
+----------------------------------------------------------------------
 function piepan.url_encode(str)
   if (str) then
     str = string.gsub (str, "\n", "\r\n")
@@ -252,31 +250,50 @@ function piepan.url_encode(str)
   return str	
 end
 
+----------------------------------------------------------------------
+-- function show tables
+----------------------------------------------------------------------
 function piepan.showtable(t)
 	for key,value in pairs(t) do
 		print("Found member " .. key);
 	end
 end
 
+----------------------------------------------------------------------
+-- function tablelenth
+----------------------------------------------------------------------
 function piepan.tablelength(T)
 	local count = 0
 	for _ in pairs(T) do count = count + 1 end
 	return count
 end
 
+----------------------------------------------------------------------
+-- function starts
+----------------------------------------------------------------------
 function string.starts(String,Start)
    return string.sub(String,1,string.len(Start))==Start
 end
 
+----------------------------------------------------------------------
+-- function string.end
+----------------------------------------------------------------------
 function string.ends(String,End)
    return End=='' or string.sub(String,-string.len(End))==End
 end
 
+----------------------------------------------------------------------
+-- function countsubstring
+----------------------------------------------------------------------
 function piepan.countsubstring( s1, s2 )
  local magic =  "[%^%$%(%)%%%.%[%]%*%+%-%?]"
  local percent = function(s)return "%"..s end
     return select( 2, s1:gsub( s2:gsub(magic,percent), "" ) )
 end
+
+----------------------------------------------------------------------
+-- function youtubedl
+----------------------------------------------------------------------
 function piepan.youtubedl(url)
 	n1,n2 = string.find(url,' ')
 	if(n1) then
@@ -322,10 +339,17 @@ function piepan.youtubedl(url)
 		-- piepan.me.channel:send(output)
 	end
 end
+
+----------------------------------------------------------------------
+-- function youtubedl_completed
+----------------------------------------------------------------------
 function piepan.youtubedl_completed(info)
 	print("youtubedl_completed " .. (info or '?'))
 end
 
+----------------------------------------------------------------------
+-- function fadevol
+----------------------------------------------------------------------
 function piepan.fadevol(dest)
 	client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	print("fadevol dest = " .. tostring(dest))
@@ -347,10 +371,17 @@ function piepan.fadevol(dest)
 	end
 	piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
 end
+
+----------------------------------------------------------------------
+-- function fadevol_completed
+----------------------------------------------------------------------
 function piepan.fadevol_completed(info)
 	print("fadevol_completed " .. (info or '?'))
 end
 
+----------------------------------------------------------------------
+-- function onMessage
+----------------------------------------------------------------------
 function piepan.onMessage(msg)
     if msg.user == nil then
         return
@@ -487,5 +518,4 @@ function piepan.onMessage(msg)
 		piepan.me.channel:send(msg_prefix .. ret .. msg_suffix)
 	end
     end
-
 end
