@@ -981,6 +981,13 @@ local function bool(t) return t and "1" or "0" end
 
 local MPD = {}
 
+
+
+
+function piepan.MPD.sleep(sec)
+    socket.select(nil, nil, sec)
+end
+
 ---Get an MPD server connection handle.
 -- @param reconnect Whether to automatically reconnect. Default is true.
 -- @param host Default: "localhost"
