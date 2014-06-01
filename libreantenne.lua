@@ -88,16 +88,25 @@ local commands = {
 local configuration_file="./bot.conf"
 local flags = {
    debug = "",         -- debug flags -> integer
+
+   mumble_user = "",   -- mumble bot username -> string
+
    irc_server = "",    -- irc server address -> IP or DNS
    irc_port = "",      -- irc server port -> integer 2**16   
    irc_chan = "",      -- irc chan -> string
+
    mpd_server = "",    -- mpd server address -> IP or DNS
    mpd_port = "",      -- mpd port -> integer 2**16
+
    mumble_server = "", -- mumble server address -> IP or DNS
    mumble_port = "",   -- mumble port -> integer 2**16
    mumble_chan = ""    -- mumble chan -> string
+
    web_server = "",    -- mpd web server -> string
-   web_port = ""       -- mpd port -> integer 2**16
+   web_port = "",      -- mpd port -> integer 2**16
+
+   jingle_conf = "",   -- jingle configuration file path string
+   jingle_path = ""    -- jingle music path -> string
 }
 
 local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
@@ -329,6 +338,16 @@ function get_listeners(server, port)
       -- else return -1
       return -1
    end
+end
+
+----------------------------------------------------------------------
+-- jingle object
+----------------------------------------------------------------------
+function jingle:new ()
+   
+end
+
+function jingle:load ()
 end
 
 ----------------------------------------------------------------------
