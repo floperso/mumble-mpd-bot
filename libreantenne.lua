@@ -107,6 +107,15 @@ function piepan.trim(s)
 	return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
+function piepan.url_encode(str)
+  if (str) then
+    str = string.gsub (str, "\n", "\r\n")
+    str = string.gsub (str, "([^%w %-%_%.%~])",
+        function (c) return string.format ("%%%02X", string.byte(c)) end)
+    str = string.gsub (str, " ", "+")
+  end
+  return str	
+end
 
 function piepan.onMessage(msg)
     if msg.user == nil then
@@ -165,9 +174,11 @@ function piepan.onMessage(msg)
 					print("Found : [" .. file .. "]")
 					piepan.me.channel:send("Downloaded : [" .. file .. "]")
 					client:update('download')
-					client:add("/download/" .. file)
-					client:add("download/" .. file)
-					print("Adding : [download/" .. file .. "]")
+					uri = '"download/' .. file .. '"'
+					-- print(client:add("file://" .. uri))
+					print(client:add(uri))
+					-- client:add("download/" .. file)
+					print("Adding : [" .. uri .. "]")
 					piepan.me.channel:send("Song added to the playlist.")
 				else
 					print("Failed to find EOL")
