@@ -20,65 +20,65 @@ local should_move = false
 -- Table with keys being the keywords and values being the sound files
 ----------------------------------------------------------------------
 local sounds = {
-    tvois = "tvois.ogg",
-    chaud1 = "chaud1.ogg",
-    chaud2 = "chaud2.ogg",
-    chaud3 = "chaud3.ogg",
-    chaud4 = "chaud4.ogg",
-    chaud5 = "chaud5.ogg",
-    chaud6 = "chaud_himi2.ogg",
-    chaud7 = "chaud_est.ogg",
-    quoinon = "quoi_non.ogg",
-    cage = "cage.ogg",
-    enerve = "enerve.ogg",
-    fouet1 = "fouet1.ogg",
-    fouet2 = "fouet2.ogg",
-    pantalon= "pantalon.ogg",
-    pantalon2= "pantalon2.ogg",
-    rappelons1 = "merde.ogg",
-    rappelons2 = "enfants.ogg",
-    rappelons3 = "enfants2.ogg",
-    radiobatard1 = "radio_batard.ogg",
-    radiobatard2 = "radio_batard2.ogg",
-    ohoo = "ohoo.ogg",
-    paspossible = "pas_possible.ogg",
-    microco = "micro_co.ogg",
-    fdp = "fdp.ogg",
-    chagasse = "chagasse.ogg",
-    sodo = "sodo.ogg",
-    faim = "faim.ogg",
-    rire1 = "rire_crack.ogg",
-    shoote = "shoot.ogg",
-    flo1 = "flo1.ogg",
-    flo2 = "bonjour_flo2.ogg",
-    mens = "menstruations.ogg",
-    re = "re.ogg",
-    combat = "combat_himi.ogg",
-    yeux1 = "yeux_ciel.ogg",
-    yeux2 = "baisse_les_yeux.ogg",
-    nice = "nice.ogg"
+   tvois = "tvois.ogg",
+   chaud1 = "chaud1.ogg",
+   chaud2 = "chaud2.ogg",
+   chaud3 = "chaud3.ogg",
+   chaud4 = "chaud4.ogg",
+   chaud5 = "chaud5.ogg",
+   chaud6 = "chaud_himi2.ogg",
+   chaud7 = "chaud_est.ogg",
+   quoinon = "quoi_non.ogg",
+   cage = "cage.ogg",
+   enerve = "enerve.ogg",
+   fouet1 = "fouet1.ogg",
+   fouet2 = "fouet2.ogg",
+   pantalon= "pantalon.ogg",
+   pantalon2= "pantalon2.ogg",
+   rappelons1 = "merde.ogg",
+   rappelons2 = "enfants.ogg",
+   rappelons3 = "enfants2.ogg",
+   radiobatard1 = "radio_batard.ogg",
+   radiobatard2 = "radio_batard2.ogg",
+   ohoo = "ohoo.ogg",
+   paspossible = "pas_possible.ogg",
+   microco = "micro_co.ogg",
+   fdp = "fdp.ogg",
+   chagasse = "chagasse.ogg",
+   sodo = "sodo.ogg",
+   faim = "faim.ogg",
+   rire1 = "rire_crack.ogg",
+   shoote = "shoot.ogg",
+   flo1 = "flo1.ogg",
+   flo2 = "bonjour_flo2.ogg",
+   mens = "menstruations.ogg",
+   re = "re.ogg",
+   combat = "combat_himi.ogg",
+   yeux1 = "yeux_ciel.ogg",
+   yeux2 = "baisse_les_yeux.ogg",
+   nice = "nice.ogg"
 }
 
 ----------------------------------------------------------------------
 -- commands array
 ----------------------------------------------------------------------
 local commands = {
-	setvol = "setvol",
-	v = "volume",
-	volume = "volume",
-	youtube = "youtube",
-	y = "youtube",
-	last = "last",
-	next = "next",
-	prev = "prev",
-	play = "play",
-	pause = "pause",
-	s = "song",
-	random = "random",
-	consume = "consume",
-	help = "help",
-	fadevol = "fadevol",
-	song = "song"
+   setvol = "setvol",
+   v = "volume",
+   volume = "volume",
+   youtube = "youtube",
+   y = "youtube",
+   last = "last",
+   next = "next",
+   prev = "prev",
+   play = "play",
+   pause = "pause",
+   s = "song",
+   random = "random",
+   consume = "consume",
+   help = "help",
+   fadevol = "fadevol",
+   song = "song"
 }
 
 ----------------------------------------------------------------------
@@ -86,15 +86,15 @@ local commands = {
 ----------------------------------------------------------------------
 local configuration_file="./bot.conf"
 local flags = {
-        debug = "",         -- debug flags -> integer
-        irc_server = "",    -- irc server address -> IP or DNS
-        irc_port = "",      -- irc server port -> integer 2**16   
-        irc_chan = "",      -- irc chan -> string
-        mpd_server = "",    -- mpd server address -> IP or DNS
-        mpd_port = "",      -- mpd port -> integer 2**16
-        mumble_server = "", -- mumble server address -> IP or DNS
-        mumble_port = "",   -- mumble port -> integer 2**16
-        mumble_chan = ""    -- mumble chan -> string
+   debug = "",         -- debug flags -> integer
+   irc_server = "",    -- irc server address -> IP or DNS
+   irc_port = "",      -- irc server port -> integer 2**16   
+   irc_chan = "",      -- irc chan -> string
+   mpd_server = "",    -- mpd server address -> IP or DNS
+   mpd_port = "",      -- mpd port -> integer 2**16
+   mumble_server = "", -- mumble server address -> IP or DNS
+   mumble_port = "",   -- mumble port -> integer 2**16
+   mumble_chan = ""    -- mumble chan -> string
 }
 
 local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
@@ -110,10 +110,17 @@ local mpd_connect = mpd_connect
 -- piepan functions
 ----------------------------------------------------------------------
 function piepan.onConnect()
-    if piepan.args.soundboard then
-        prefix = piepan.args.soundboard
-    end
-    print ("Bridgitte chargée")
+   if piepan.args.soundboard then
+      prefix = piepan.args.soundboard
+   end
+   print ("Bridgitte chargée")
+   print ("Loading configuration...")
+   if (parseConfiguration())
+   then
+      print("ok.")
+   else
+      print("error.")
+   end
 end
 
 ----------------------------------------------------------------------
@@ -121,88 +128,126 @@ end
 -- https://stackoverflow.com/questions/4990990/lua-check-if-a-file-exists
 ----------------------------------------------------------------------
 function file_exists(name)
-   local f=io.open(name,"r")
-   if f~=nil then io.close(f) return true else return false end
+   local f = io.open(name,"r")
+   if (f~=nil)
+   then io.close(f) 
+      return true 
+   else 
+      return false 
+   end
 end
 
 ----------------------------------------------------------------------
 -- parseConfiguration function, no arguments 
 ----------------------------------------------------------------------
 function parseConfiguration ()
-	if (file_exists) then
-        	local file = assert(io.open(configuration_file, "r"))
-        	local line = file:read()
-        	local term = {}
-	else
-		return
-	fi
-
-        for line in file:lines()
-        do
-                local i = 0
-                if not (string.match(line,'^#') or  
-                        string.match(line,'^$'))
-                then
-                        for word in string.gmatch(line, '([^ ]+)')
-                        do
-                                term[i] = word
-                                i=i+1
-                        end
-                        setConfiguration(term)
-                end
-        end
+   if (file_exists(configuration_file)) then
+      local file = assert(io.open(configuration_file, "r"))
+      local line = file:read()
+      local term = {}
+   else
+      return false
+   end
+      
+   for line in file:lines()
+   do
+      local i = 0
+      if not (string.match(line,'^#') or  
+	      string.match(line,'^$'))
+      then
+	 for word in string.gmatch(line, '([^ ]+)')
+	 do
+	    term[i] = word
+	    i=i+1
+	 end
+	 setConfiguration(term)
+      end
+   end
+   return true
 end
 
 ----------------------------------------------------------------------
 -- setConfiguration with defined terms into flags array.
 ----------------------------------------------------------------------
 function setConfiguration (array)
-        if (string.match(array[0], "debug") and
-            array[1]~='' and
-            string.match(array[1],"%d+")) then
-                flags["debug"] = tonumber(array[1])
+   -- debug configuration flags
+   if (string.match(array[0], "debug") and
+       array[1]~='' and
+       string.match(array[1],"%d+")) 
+   then
+      flags["debug"] = tonumber(array[1])
 
-        elseif (string.match(array[0], 'irc') and
-                string.match(array[1], 'server') and
-                array[2]~='') then
-                flags["irc_server"] = array[2]
+   -- irc server configuration flags
+   elseif (string.match(array[0], 'irc') and
+	   string.match(array[1], 'server') and
+	   array[2]~='') 
+   then
+      flags["irc_server"] = array[2]
 
-        elseif (string.match(array[0], 'irc') and
-                string.match(array[1], 'port') and
-                array[2]~='' and
-                string.match(array[2],"%d+")) then
-                if (tonumber(array[2])>0 and
-                    tonumber(array[2])<65536)
-                then
-                        flags["irc_port"] = tonumber(array[2])
-                end
-	elseif (string.match(array[0], 'irc') and
-                string.match(array[1], 'chan') and
-                array[2]~='') then
-                flags["irc_chan"] = array[2]
+   -- irc port configuration flags
+   elseif (string.match(array[0], 'irc') and
+	   string.match(array[1], 'port') and
+	   array[2]~='' and
+	   string.match(array[2],"%d+")) 
+   then
+      if (tonumber(array[2])>0 and
+	  tonumber(array[2])<65536)
+      then
+	 flags["irc_port"]=tonumber(array[2])
+      end
 
-        elseif (string.match(array[0], 'mumble') and
-                string.match(array[1], 'server') and
-                array[2]~='') then
-                flags["mumble_server"] = array[2]
-
-        elseif (string.match(array[0], 'mumble') and
-                string.match(array[1], 'port') and
-                array[2]~='' and
-                string.match(array[2], "%d+")) then
-                if (tonumber(array[2])>0 and
-                    tonumber(array[2])<65536)
-                then
-                        flags["mumble_port"] = tonumber(array[2])
-                end
-
-        elseif (string.match(array[0], 'mumble') and
-                string.match(array[1], 'chan') and
-                array[2]~='')
-        then
-		flags["mumble_chan"]=array[2]
-
-        end
+   -- irc chan configuration flags
+   elseif (string.match(array[0], 'irc') and
+	   string.match(array[1], 'chan') and
+	   array[2]~='') 
+   then
+      flags["irc_chan"]=array[2]
+      
+   -- mumble server configuration flag
+   elseif (string.match(array[0], 'mumble') and
+	   string.match(array[1], 'server') and
+	   array[2]~='') 
+   then
+      flags["mumble_server"]=array[2]
+   
+   -- mumble port configuration flag
+   elseif (string.match(array[0], 'mumble') and
+	   string.match(array[1], 'port') and
+	   array[2]~='' and
+	   string.match(array[2], "%d+")) 
+   then
+      if (tonumber(array[2])>0 and
+	  tonumber(array[2])<65536)
+      then
+	 flags["mumble_port"]=tonumber(array[2])
+      end
+   
+   -- mumble chan configuration flag
+   elseif (string.match(array[0], 'mumble') and
+	   string.match(array[1], 'chan') and
+	   array[2]~='')
+   then
+      flags["mumble_chan"]=array[2]
+   
+   -- mpd server configuration flag
+   elseif (string.match(array[0], 'mpd') and
+	   string.match(array[1], 'server') and
+	   array[2]~='') 
+   then
+      flags["mpd_server"]=array[2]
+   
+   -- mpd port configuration flag
+   elseif (string.match(array[0], 'mpd') and
+	   string.match(array[1], 'port') and
+	   array[2]~='' and
+	   string.match(array[2], "%d+"))
+   then
+      if (tonumber(array[2])>0 and
+	  tonumber(array[2])<65536)
+      then
+	 flags["mpd_port"]=tonumber(array[2])
+      end
+   end
 end
 
 ----------------------------------------------------------------------
