@@ -5,7 +5,6 @@
 -- require "mpd"
 ----------------------------------------------------------------------
 
--- local mpd = mpd
 
 -- Boolean if users need to be registered on the server to trigger sounds
 local require_registered = true
@@ -143,15 +142,22 @@ end
 -- parseConfiguration function, no arguments 
 ----------------------------------------------------------------------
 function parseConfiguration ()
+   local conf_file = nil
+   local term = {}
    if (file_exists(configuration_file)) then
-      local file = assert(io.open(configuration_file, "r"))
-      local line = file:read()
-      local term = {}
+      conf_file = assert(io.open(configuration_file, "r"))
+      if not conf_file then
+          print ("Failed to open " .. configuration_file .. " for reading")
+          return false
+      end
+
+      -- local line = conf_file:read()
    else
       return false
    end
-      
-   for line in file:lines()
+
+   
+   for line in conf_file:lines()
    do
       local i = 0
       if not (string.match(line,'^#') or  
