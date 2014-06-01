@@ -95,6 +95,8 @@ local flags = {
    mumble_server = "", -- mumble server address -> IP or DNS
    mumble_port = "",   -- mumble port -> integer 2**16
    mumble_chan = ""    -- mumble chan -> string
+   web_server = "",    -- mpd web server -> string
+   web_port = ""       -- mpd port -> integer 2**16
 }
 
 local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
@@ -172,7 +174,6 @@ end
 function setConfiguration (array)
    -- debug configuration flags
    if (string.match(array[0], "debug") and
-       array[1]~='' and
        string.match(array[1],"%d+")) 
    then
       flags["debug"] = tonumber(array[1])
@@ -187,7 +188,6 @@ function setConfiguration (array)
    -- irc port configuration flags
    elseif (string.match(array[0], 'irc') and
 	   string.match(array[1], 'port') and
-	   array[2]~='' and
 	   string.match(array[2],"%d+")) 
    then
       if (tonumber(array[2])>0 and
@@ -213,7 +213,6 @@ function setConfiguration (array)
    -- mumble port configuration flag
    elseif (string.match(array[0], 'mumble') and
 	   string.match(array[1], 'port') and
-	   array[2]~='' and
 	   string.match(array[2], "%d+")) 
    then
       if (tonumber(array[2])>0 and
@@ -239,7 +238,6 @@ function setConfiguration (array)
    -- mpd port configuration flag
    elseif (string.match(array[0], 'mpd') and
 	   string.match(array[1], 'port') and
-	   array[2]~='' and
 	   string.match(array[2], "%d+"))
    then
       if (tonumber(array[2])>0 and
@@ -247,6 +245,88 @@ function setConfiguration (array)
       then
 	 flags["mpd_port"]=tonumber(array[2])
       end
+   
+   -- mpd web server configuration flag
+   elseif (string.match(array[0], 'web') and
+	   string.match(array[1], 'server') and
+	   array[2]~='')
+   then
+      flags["web_server"]=array[2]
+
+   -- mpd web port configuration flag
+   elseif (string.match(array[0], 'web') and
+	   string.match(array[1], 'port') and
+	   string.match(array[2], "%d+"))
+   then
+      if (tonumber(array[2])>0 and
+	  tonumber(array[2])<65536)
+      then
+	 flags["web_port"]=tonumber(array[2])
+      end
+   end
+end
+
+----------------------------------------------------------------------
+-- get_listeners, return sum of listeners
+----------------------------------------------------------------------
+function get_listeners(server, port)
+   
+   -- check if arguments are okay
+   if not (string.match(server, ".+")) then
+      print("error on first arg") 
+      return -1
+   end
+
+   if not (string.match(port, "\d+")) then
+      print("error on second arg") 
+      return -1
+   end
+
+   -- local UNIX commands
+   curl_command="/usr/bin/curl --silent http://"..server..":"..port
+   grep_command="/bin/grep -r 'Current Listeners' -A1"
+   get_command=curl_command.."|"..grep_command
+
+   -- open pipe and execute get_command
+   local listeners = assert(io.popen(get_command, 'r'), "pipe error")
+   
+   -- define 2 "random" string and init buf
+   local _start="GOdwkg##"
+   local _end="==AHbewA"
+   local buf=0
+
+   -- if listeners is not empty
+   if (listeners)
+   then
+      
+      -- read all command output line by line
+      for line in listeners:read()
+      do
+	 
+	 -- if line match with streamdata...
+	 if (string.match(line, "streamdata"))
+	 then
+
+	    -- ...parse it...
+	    s=string.gsub(line, "%d+", _start.."%1".._end)
+	    s=string.gsub(s, ".*".._start, "")
+	    s=string.gsub(s, _end..".*", "")
+	    
+	    -- ...and generate sum of listeners
+	    if (string.match(s,"%d"))
+	    then
+	       buf=buf+tonumber(s)
+	    end
+	 end
+      end
+
+      -- finaly, close pipe and return buf
+      listeners:close()
+      return buf
+   else
+
+      -- else return -1
+      return -1
    end
 end
 
@@ -331,9 +411,9 @@ end
 -- function countsubstring
 ----------------------------------------------------------------------
 function piepan.countsubstring( s1, s2 )
- local magic =  "[%^%$%(%)%%%.%[%]%*%+%-%?]"
- local percent = function(s)return "%"..s end
-    return select( 2, s1:gsub( s2:gsub(magic,percent), "" ) )
+   local magic =  "[%^%$%(%)%%%.%[%]%*%+%-%?]"
+   local percent = function(s)return "%"..s end
+   return select( 2, s1:gsub( s2:gsub(magic,percent), "" ) )
 end
 
 ----------------------------------------------------------------------
