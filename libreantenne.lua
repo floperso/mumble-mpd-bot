@@ -100,7 +100,7 @@ local flags = {
 
    mumble_server = "", -- mumble server address -> IP or DNS
    mumble_port = "",   -- mumble port -> integer 2**16
-   mumble_chan = ""    -- mumble chan -> string
+   mumble_chan = "",    -- mumble chan -> string
 
    web_server = "",    -- mpd web server -> string
    web_port = "",      -- mpd port -> integer 2**16
@@ -295,7 +295,7 @@ function get_listeners(server, port)
       return -1
    end
 
-   if not (string.match(port, "\d+")) then
+   if not (string.match(port, "\\d+")) then
       print("error on second arg") 
       return -1
    end
@@ -351,6 +351,8 @@ end
 ----------------------------------------------------------------------
 -- jingle object
 ----------------------------------------------------------------------
+local jingle = {}
+
 function jingle:new ()
    
 end
