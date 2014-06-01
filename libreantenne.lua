@@ -4,11 +4,11 @@
 -- Sounds are triggered when #<keyword> appears in a text message, where
 -- keyword has been defined below in the sounds table.
 --
-require "socket"
-require "mpd"
+-- require "socket"
+-- require "mpd"
 
 
-local mpd = mpd
+-- local mpd = mpd
 
 -- Boolean if users need to be registered on the server to trigger sounds
 local require_registered = true
@@ -53,6 +53,10 @@ local sounds = {
     flo1 = "flo1.ogg",
     flo2 = "bonjour_flo2.ogg",
     mens = "menstruations.ogg",
+    re = "re.ogg",
+    combat = "combat_himi.ogg",
+    yeux1 = "yeux_ciel.ogg",
+    yeux2 = "baisse_les_yeux.ogg",
     nice = "nice.ogg"
 }
 local commands = {
@@ -61,6 +65,11 @@ local commands = {
 	volume = "volume",
 	youtube = "youtube",
 	y = "youtube",
+	last = "last",
+	next = "next",
+	prev = "prev",
+	play = "play",
+	pause = "pause",
 	s = "song",
 	song = "song"
 }
@@ -83,18 +92,20 @@ function string:split(sep)
 end
 
 function piepan.formatSong(song)
+
+	piepan.showtable(song)
 	s = ''
-	if(song['artist']) then 
-		s = s .. song['artist'] .. ' - '
+	if(song['Artist']) then 
+		s = s .. song['Artist'] .. ' - '
 	end
-	if(song['album']) then 
-		s = s .. song['album'] .. ' - '
+	if(song['Album']) then 
+		s = s .. song['Album'] .. ' - '
 	end 
-	if(song['title']) then 
-		s = s .. song['title']
+	if(song['Title']) then 
+		s = s .. song['Title']
 	end
-	if(song['date']) then 
-		s = s .. ' (' .. song['date'] .. ')'
+	if(song['Date']) then 
+		s = s .. ' (' .. song['Date'] .. ')'
 	end
 	if('' == s) then 
 		s = song['file']
@@ -117,6 +128,68 @@ function piepan.url_encode(str)
   return str	
 end
 
+function piepan.showtable(t)
+	for key,value in pairs(t) do
+		print("Found member " .. key);
+	end
+end
+
+function piepan.tablelength(T)
+	local count = 0
+	for _ in pairs(T) do count = count + 1 end
+	return count
+end
+
+function string.starts(String,Start)
+   return string.sub(String,1,string.len(Start))==Start
+end
+
+function string.ends(String,End)
+   return End=='' or string.sub(String,-string.len(End))==End
+end
+
+function piepan.countsubstring( s1, s2 )
+ local magic =  "[%^%$%(%)%%%.%[%]%*%+%-%?]"
+ local percent = function(s)return "%"..s end
+    return select( 2, s1:gsub( s2:gsub(magic,percent), "" ) )
+end
+function piepan.youtubedl(url)
+	n1,n2 = string.find(url,' ')
+	if(n1) then
+		link = string.sub(url,n1+1)
+		link = link:gsub("%b<>", "")
+		piepan.me.channel:send("Loading [" .. link .. "] ...")
+		print("Loading [" .. link .. "] ...")
+		local file = assert(io.popen('./yt_dl.sh ' .. link, 'r'))
+		local output = file:read('*all')
+		file:close()
+		print(output)
+		n1,n2 = string.find(output,"[avconv] Destination: ",nil,true)
+		if(n1) then
+			n3,n4 = string.find(output,"\n",n2)
+			if(n3) then
+				file = piepan.trim(string.sub(output,n2,n3))
+				print("Found : [" .. file .. "]")
+				piepan.me.channel:send("Downloaded : [" .. file .. "]")
+				client:update('download')
+				-- client:idle('download')
+				-- socket.sleep(5)
+				os.execute("sleep " .. tonumber(5))
+				uri = '"download/' .. file .. '"'
+				-- print(client:add("file://" .. uri))
+				print(client:sendrecv("add " .. uri))
+				-- client:add("download/" .. file)
+				print("Adding : [" .. uri .. "]")
+				piepan.me.channel:send("Song added to the playlist.")
+			else
+				print("Failed to find EOL")
+			end
+		else
+			print("Failed to find '[avconv] Destination' in " .. output)
+		end
+		-- piepan.me.channel:send(output)
+	end
+end
 function piepan.onMessage(msg)
     if msg.user == nil then
         return
@@ -146,7 +219,7 @@ function piepan.onMessage(msg)
 	piepan.Audio.stop()
 	piepan.me.channel:play(soundFile)
     end
-    if(commands[search]) then
+    if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
 	c = commands[search]
 	client = piepan.MPD.mpd_connect("212.129.4.80",6600,true)
 	if("setvol" == c) then
@@ -154,6 +227,20 @@ function piepan.onMessage(msg)
 		vol = math.max(0,math.min(100,vol))
 		client:set_vol(vol)
 		piepan.me.channel:send("Volume ajusté à " .. tostring(vol) .. "%")
+	elseif(msg.text:starts('#v+')) then
+		print("V+" .. tostring(piepan.countsubstring(msg.text,'+')))
+		s = client:status()
+		v = tonumber(s['volume'])
+		v = math.min(100,v + 5 * piepan.countsubstring(msg.text,'+'))
+		client:set_vol(v)
+		piepan.me.channel:send("Volume ajusté à " .. tostring(v) .. "%")
+	elseif(msg.text:starts('#v-')) then
+		print("V-")
+		s = client:status()
+		v = tonumber(s['volume'])
+		v = math.max(0,v - 5 * piepan.countsubstring(msg.text,'-'))
+		client:set_vol(v)
+		piepan.me.channel:send("Volume ajusté à " .. tostring(v) .. "%")
 	elseif("youtube" == c) then
 		
 		n1,n2 = string.find(msg.text,' ')
@@ -174,9 +261,12 @@ function piepan.onMessage(msg)
 					print("Found : [" .. file .. "]")
 					piepan.me.channel:send("Downloaded : [" .. file .. "]")
 					client:update('download')
+					-- client:idle('download')
+					-- socket.sleep(5)
+					os.execute("sleep " .. tonumber(5))
 					uri = '"download/' .. file .. '"'
 					-- print(client:add("file://" .. uri))
-					print(client:add(uri))
+					print(client:sendrecv("add " .. uri))
 					-- client:add("download/" .. file)
 					print("Adding : [" .. uri .. "]")
 					piepan.me.channel:send("Song added to the playlist.")
@@ -189,6 +279,27 @@ function piepan.onMessage(msg)
 			-- piepan.me.channel:send(output)
 		end
 		
+	elseif("last" == c) then
+		pli = client:playlistinfo()
+		-- piepan.showtable(pli)
+		pli_len = piepan.tablelength(pli)
+		print("Playlist length = " .. tostring(pli_len))
+		last = pli[pli_len]['Id']
+		-- piepan.showtable(pli[pli_len])
+		print("Last : " .. tostring(last))
+		client:playid(tonumber(last))
+	elseif("next" == c) then
+		print(client:next())
+		piepan.me.channel:send("Ok")
+	elseif("play" == c) then
+		print(client:pause(0))
+		piepan.me.channel:send("Ok")
+	elseif("pause" == c) then
+		print(client:pause(1))
+		piepan.me.channel:send("Ok")
+	elseif("prev" == c) then
+		print(client:previous())
+		piepan.me.channel:send("Ok")
 	elseif("volume" == c) then
 		s = client:status()
 		piepan.me.channel:send("Volume : " .. tostring(s['volume']) .. "%")
