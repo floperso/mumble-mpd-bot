@@ -71,8 +71,16 @@ local commands = {
 	play = "play",
 	pause = "pause",
 	s = "song",
+	random = "random",
+	consume = "consume",
+	help = "help",
+	fadevol = "fadevol",
 	song = "song"
 }
+
+local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
+local msg_suffix = "&nbsp;-&nbsp;&#x266B;</span>"
+
 -- Sound file path prefix
 local prefix = "jingles/"
 local mpd_connect = mpd_connect
@@ -92,24 +100,14 @@ function string:split(sep)
 end
 
 function piepan.formatSong(song)
-
+	print("formatSong : ")
 	piepan.showtable(song)
 	s = ''
-	if(song['Artist']) then 
-		s = s .. song['Artist'] .. ' - '
-	end
-	if(song['Album']) then 
-		s = s .. song['Album'] .. ' - '
-	end 
-	if(song['Title']) then 
-		s = s .. song['Title']
-	end
-	if(song['Date']) then 
-		s = s .. ' (' .. song['Date'] .. ')'
-	end
-	if('' == s) then 
-		s = song['file']
-	end
+	if(song['Artist']) then s = s .. song['Artist'] .. ' - ' end
+	if(song['Album']) then s = s .. song['Album'] .. ' - ' end 
+	if(song['Title']) then s = s .. song['Title'] end
+	if(song['Date']) then s = s .. ' (' .. song['Date'] .. ')' end
+	if('' == s) then s = song['file'] end
 	return s
 end
 
@@ -158,7 +156,9 @@ function piepan.youtubedl(url)
 	if(n1) then
 		link = string.sub(url,n1+1)
 		link = link:gsub("%b<>", "")
-		piepan.me.channel:send("Loading [" .. link .. "] ...")
+		link = link:gsub("%s+", "+")
+		link = link:gsub("'", "+")
+		piepan.me.channel:send(msg_prefix .. "Chargement en cours : [" .. link .. "] ..." .. msg_suffix)
 		print("Loading [" .. link .. "] ...")
 		local file = assert(io.popen('./yt_dl.sh ' .. link, 'r'))
 		local output = file:read('*all')
@@ -170,7 +170,7 @@ function piepan.youtubedl(url)
 			if(n3) then
 				file = piepan.trim(string.sub(output,n2,n3))
 				print("Found : [" .. file .. "]")
-				piepan.me.channel:send("Downloaded : [" .. file .. "]")
+				piepan.me.channel:send(msg_prefix .. "Téléchargement terminé : [" .. file .. "]" .. msg_suffix)
 				client:update('download')
 				-- client:idle('download')
 				-- socket.sleep(5)
@@ -180,16 +180,51 @@ function piepan.youtubedl(url)
 				print(client:sendrecv("add " .. uri))
 				-- client:add("download/" .. file)
 				print("Adding : [" .. uri .. "]")
-				piepan.me.channel:send("Song added to the playlist.")
+				piepan.me.channel:send(msg_prefix .. "Morceau ajouté à la liste." .. msg_suffix)
 			else
 				print("Failed to find EOL")
 			end
 		else
-			print("Failed to find '[avconv] Destination' in " .. output)
+			n1, n2 = string.find(output,"[download] File is larger",nil,true)
+			if(n1) then
+				piepan.me.channel:send(msg_prefix .. "Fichier trop volumineux (>20Mo)" .. msg_suffix)
+			else
+				print("Failed to find '[avconv] Destination' in " .. output)
+				piepan.me.channel:send(msg_prefix .. "Le téléchargement a merdé." .. msg_suffix)
+			end
 		end
 		-- piepan.me.channel:send(output)
 	end
 end
+function piepan.youtubedl_completed(info)
+	print("youtubedl_completed " .. (info or '?'))
+end
+
+function piepan.fadevol(dest)
+	client = piepan.MPD.mpd_connect("212.129.4.80",6600,true)
+	print("fadevol dest = " .. tostring(dest))
+	vol = tonumber(client:status()['volume'])
+	delta = 1
+	print("fadevol vol = " .. tostring(vol))
+	if(vol == dest) then return end
+	if(dest < vol) then delta = - delta end
+	print("fadevol " .. tostring(vol) .. " => " .. tostring(dest) .. " d=" .. tostring(delta))
+	while true do
+		if delta>0 and dest<=vol then break end
+		if delta<0 and dest>=vol then break end
+		vol = vol + delta
+		print("fadevol => " .. tostring(vol))
+		client:set_vol(vol)
+		--#print("dv " + str(vol) +" %")$
+		 -- time.sleep(0.2) -- = 5% par seconde
+		piepan.MPD.sleep(0.2)
+	end
+	piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
+end
+function piepan.fadevol_completed(info)
+	print("fadevol_completed " .. (info or '?'))
+end
+
 function piepan.onMessage(msg)
     if msg.user == nil then
         return
@@ -226,58 +261,41 @@ function piepan.onMessage(msg)
 		vol = tonumber(string.sub(msg.text,8))
 		vol = math.max(0,math.min(100,vol))
 		client:set_vol(vol)
-		piepan.me.channel:send("Volume ajusté à " .. tostring(vol) .. "%")
+		piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
+	elseif("fadevol" == c) then
+		print("fadevol " .. msg.text)
+		vol = tonumber(string.sub(msg.text,9))
+		vol = math.max(0,math.min(100,vol))
+		-- piepan.fadevol(vol)
+		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,vol)
 	elseif(msg.text:starts('#v+')) then
 		print("V+" .. tostring(piepan.countsubstring(msg.text,'+')))
 		s = client:status()
 		v = tonumber(s['volume'])
 		v = math.min(100,v + 5 * piepan.countsubstring(msg.text,'+'))
-		client:set_vol(v)
-		piepan.me.channel:send("Volume ajusté à " .. tostring(v) .. "%")
+		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,v)
+		-- client:set_vol(v)
+		-- piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(v) .. "%" .. msg_suffix)
 	elseif(msg.text:starts('#v-')) then
 		print("V-")
 		s = client:status()
 		v = tonumber(s['volume'])
 		v = math.max(0,v - 5 * piepan.countsubstring(msg.text,'-'))
-		client:set_vol(v)
-		piepan.me.channel:send("Volume ajusté à " .. tostring(v) .. "%")
+		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,v)
+		-- client:set_vol(v)
+		-- piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(v) .. "%" .. msg_suffix)
+	elseif(msg.text:starts('#random ')) then
+		val = tonumber(string.sub(msg.text,8))
+		val = math.max(0,math.min(1,val))
+		client:set_random(val)
+		piepan.me.channel:send("Ok")
+	elseif(msg.text:starts('#consume ')) then
+		val = tonumber(string.sub(msg.text,8))
+		val = math.max(0,math.min(1,val))
+		client:set_consume(val)
+		piepan.me.channel:send("Ok")
 	elseif("youtube" == c) then
-		
-		n1,n2 = string.find(msg.text,' ')
-		if(n1) then
-			link = string.sub(msg.text,n1+1)
-			link = link:gsub("%b<>", "")
-			piepan.me.channel:send("Loading [" .. link .. "] ...")
-			print("Loading [" .. link .. "] ...")
-			local file = assert(io.popen('./yt_dl.sh ' .. link, 'r'))
-			local output = file:read('*all')
-			file:close()
-			print(output)
-			n1,n2 = string.find(output,"[avconv] Destination: ",nil,true)
-			if(n1) then
-				n3,n4 = string.find(output,"\n",n2)
-				if(n3) then
-					file = piepan.trim(string.sub(output,n2,n3))
-					print("Found : [" .. file .. "]")
-					piepan.me.channel:send("Downloaded : [" .. file .. "]")
-					client:update('download')
-					-- client:idle('download')
-					-- socket.sleep(5)
-					os.execute("sleep " .. tonumber(5))
-					uri = '"download/' .. file .. '"'
-					-- print(client:add("file://" .. uri))
-					print(client:sendrecv("add " .. uri))
-					-- client:add("download/" .. file)
-					print("Adding : [" .. uri .. "]")
-					piepan.me.channel:send("Song added to the playlist.")
-				else
-					print("Failed to find EOL")
-				end
-			else
-				print("Failed to find '[avconv] Destination' in " .. output)
-			end
-			-- piepan.me.channel:send(output)
-		end
+		piepan.Thread.new(piepan.youtubedl,piepan.youtubedl_completed ,msg.text)
 		
 	elseif("last" == c) then
 		pli = client:playlistinfo()
@@ -300,30 +318,47 @@ function piepan.onMessage(msg)
 	elseif("prev" == c) then
 		print(client:previous())
 		piepan.me.channel:send("Ok")
+	elseif("help" == c) then
+		s = msg_prefix .. "<b>Commandes</b>" .. msg_suffix
+		s = s .. "<pre style='color:#777'><ul>"
+		s = s .. "<li>#s : Affiche le morceau en cours de lecture</li>"
+		s = s .. "<li>#v : Affiche le volume actuel</li>"
+		s = s .. "<li>#y -lien- : Télécharge un morceau et l'ajoute à la playlist</li>"
+		s = s .. "<li>#setvol -volume- : Ajuste le volume</li>"
+		s = s .. "<li>#v+ : Augmente le volume de 5% par '+'</li>"
+		s = s .. "<li>#v- : Diminue le volume de 5% par '-'</li>"
+		s = s .. "<li>#next, #last, #prev, #play, #pause : Contrôles de lecture</li>"
+		s = s .. "<li>#random 0/1, #consume 0/1 : Change les modes de lecture</li>"
+		
+		s = s .. "</ul></pre>"
+		piepan.me.channel:send(s)
 	elseif("volume" == c) then
 		s = client:status()
-		piepan.me.channel:send("Volume : " .. tostring(s['volume']) .. "%")
+		piepan.me.channel:send(msg_prefix .. "Volume : " .. tostring(s['volume']) .. "%" .. msg_suffix)
 	elseif ("song" == c) then
 		print("Sending song info ...")
 		song = client:currentsong()
 		s = client:status()
-		print(s['volume'])
+		print("Volume : " .. s['volume'])
+		piepan.showtable(s)
 		-- piepan.printtable(song)
 		-- piepan.printtable(s)
 		-- print("Status : " .. s) 
 		tstr = ''
 		if(s['time']) then
 			t = s['time'].split(':')
-		-- tstr = '[' + str(datetime.timedelta(seconds=int(t[0])))
-		-- tstr += ' / ' + str(datetime.timedelta(seconds=int(t[1]))) + ']'
-			tstr = t
+			print("Time : " .. s['time'])
+			piepan.showtable(t)
+			-- tstr = '[' .. t[1]
+			-- tstr = tstr .. ' / ' .. t[2] .. ']'
+			tstr = tostring(s['time'])
 		end
 		summary = piepan.formatSong(song)
 		
-		ret = summary -- .. ' - ' .. tstr .. ' [vol ' .. (s['volume'] or '?') .. '% R' .. (s['random'] or '?') .. ' C' .. (s['consume'] or '?') .. ']'
+		ret = summary .. ' - ' .. tstr .. ' [vol ' .. tostring(s['volume']) .. '% R' .. (s['random'] or '?') .. ' C' .. (s['consume'] or '?') .. ']'
 		-- msg.user:send(ret)
 		print("Summary : " .. ret)
-		piepan.me.channel:send(ret)
+		piepan.me.channel:send(msg_prefix .. ret .. msg_suffix)
 	end
     end
 
