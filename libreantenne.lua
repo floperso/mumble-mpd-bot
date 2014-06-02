@@ -57,7 +57,16 @@ local sounds = {
     yeux1 = "yeux_ciel.ogg",
     yeux2 = "baisse_les_yeux.ogg",
     nice = "nice.ogg",
-    bienvenue1 = "bienvenue_triskel.ogg"
+    bienvenue1 = "bienvenue_triskel.ogg",
+    penis = "penis.ogg",
+    encore = "encore.ogg",
+    culotte = "culotte.ogg",
+    bite = "bite.ogg",
+    batard = "batard.ogg",
+    businessman = "businessman.ogg",
+    puteflo = "puteflo.ogg",
+    con2 = "con2.ogg",
+    boisson = "boisson.ogg"
 }
 
 ----------------------------------------------------------------------
@@ -79,7 +88,8 @@ local commands = {
    consume = "consume",
    help = "help",
    fadevol = "fadevol",
-   song = "song"
+   song = "song",
+   listeners = "listeners"
 }
 
 ----------------------------------------------------------------------
@@ -291,23 +301,24 @@ function get_listeners(server, port)
    
    -- check if arguments are okay
    if not (string.match(server, ".+")) then
-      print("error on first arg") 
+      print("error on first arg")
       return -1
    end
 
-   if not (string.match(port, "\\d+")) then
-      print("error on second arg") 
+   if not (string.match(port, "%d+")) then
+      print("error on second arg")
       return -1
    end
 
    -- local UNIX commands
    curl_command="/usr/bin/curl --silent http://"..server..":"..port
-   grep_command="/bin/grep -r 'Current Listeners' -A1"
+   -- grep_command="/bin/grep -r 'Current Listeners' -A1"
+   grep_command="/bin/grep 'Current Listeners' -A1"
    get_command=curl_command.."|"..grep_command
 
+   print("get_command : " .. get_command)
    -- open pipe and execute get_command
    local listeners = assert(io.popen(get_command, 'r'), "pipe error")
-   
    -- define 2 "random" string and init buf
    local _start="GOdwkg##"
    local _end="==AHbewA"
@@ -318,7 +329,7 @@ function get_listeners(server, port)
    then
       
       -- read all command output line by line
-      for line in listeners:read()
+      for line in listeners:lines()
       do
 	 
 	 -- if line match with streamdata...
@@ -591,6 +602,7 @@ function piepan.onMessage(msg)
     end
     if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
 	c = commands[search]
+	print(flags["mpd_server"] .. "  " .. tostring(flags["mpd_port"]))
 	client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	if("setvol" == c) then
 		vol = tonumber(string.sub(msg.text,8))
@@ -631,7 +643,10 @@ function piepan.onMessage(msg)
 		piepan.me.channel:send("Ok")
 	elseif("youtube" == c) then
 		piepan.Thread.new(piepan.youtubedl,piepan.youtubedl_completed ,msg.text)
-		
+	elseif("listeners" == c) then
+		listeners = get_listeners("212.129.4.80",8000)
+		print("Listeners : " .. tostring(listeners))
+		piepan.me.channel:send("Nombre d'auditeurs : " .. tostring(listeners))
 	elseif("last" == c) then
 		pli = client:playlistinfo()
 		-- piepan.showtable(pli)
@@ -674,7 +689,7 @@ function piepan.onMessage(msg)
 		song = client:currentsong()
 		status = client:status()
 		print("Volume : " .. status['volume'])
-		piepan.showtable(s)
+		-- piepan.showtable(s)
 		tstr = ''
 		if(status['time']) then
 			time_pair = piepan.splitPlain(status['time'],':')
