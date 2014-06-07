@@ -16,6 +16,9 @@ local interrupt_sounds = false
 -- Boolean if the bot should move into the user's channel to play the sound
 local should_move = false
 
+local disable_jingle_ts = 0
+
+
 ----------------------------------------------------------------------
 -- Table with keys being the keywords and values being the sound files
 ----------------------------------------------------------------------
@@ -38,6 +41,7 @@ local sounds = {
     rappelons1 = "merde.ogg",
     rappelons2 = "enfants.ogg",
     rappelons3 = "enfants2.ogg",
+    rappelons4 = "telechargement.ogg",
     radiobatard1 = "radio_batard.ogg",
     radiobatard2 = "radio_batard2.ogg",
     ohoo = "ohoo.ogg",
@@ -56,8 +60,8 @@ local sounds = {
     combat = "combat_himi.ogg",
     yeux1 = "yeux_ciel.ogg",
     yeux2 = "baisse_les_yeux.ogg",
-    nice = "nice.ogg",
     bienvenue1 = "bienvenue_triskel.ogg",
+    bienvenue2 = "bienvenue_himi.ogg",
     penis = "penis.ogg",
     encore = "encore.ogg",
     culotte = "culotte.ogg",
@@ -66,6 +70,12 @@ local sounds = {
     businessman = "businessman.ogg",
     puteflo = "puteflo.ogg",
     con2 = "con2.ogg",
+    aahh = "aahh.ogg",
+    zoo1 = "zoo1.ogg",
+    zoo2 = "zoo2.ogg",
+    ascaris = "ascaris.ogg",
+    pertinent = "pertinent.ogg",
+    bienvenuejap = "bienvenu_jap_himi.ogg",
     boisson = "boisson.ogg"
 }
 
@@ -89,7 +99,11 @@ local commands = {
    help = "help",
    fadevol = "fadevol",
    song = "song",
-   listeners = "listeners"
+   listeners = "listeners",
+   disablej = "disablej",
+   enablej = "enablej",
+   keep = "keep",
+   n = "next?"
 }
 
 ----------------------------------------------------------------------
@@ -120,7 +134,8 @@ local flags = {
 }
 
 -- violet local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
-local msg_prefix = "<span style='color:#384'>&#x266B;&nbsp;-&nbsp;"
+-- local msg_prefix = "<span style='color:#384'>&#x266B;&nbsp;-&nbsp;"
+local msg_prefix = "<span style='color:#339933'>&#x266B;&nbsp;-&nbsp;"
 local msg_suffix = "&nbsp;-&nbsp;&#x266B;</span>"
 
 ----------------------------------------------------------------------
@@ -403,8 +418,8 @@ end -- function split
 -- formatSong function
 ----------------------------------------------------------------------
 function piepan.formatSong(song)
-	print("formatSong : ")
-	piepan.showtable(song)
+	-- print("formatSong : ")
+	-- piepan.showtable(song)
 	ret = ''
 	if(song['Artist']) then ret = ret .. song['Artist'] .. ' - ' end
 	if(song['Album']) then ret = ret .. song['Album'] .. ' - ' end 
@@ -434,6 +449,26 @@ function piepan.url_encode(str)
   return str	
 end
 
+----------------------------------------------------------------------
+-- function unaccent : replace accents from strings
+----------------------------------------------------------------------
+local translatechars = function (str, re, tbl)
+     return (string.gsub(str, re, function (c) return tbl[c] or c end))
+   end
+
+function unaccent(str)
+	unaccent_from, unaccent_to =
+   "ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöøùúûüý",
+   "AAAAAACEEEEIIIINOOOOOOUUUUYaaaaaaceeeeiiiinoooooouuuuy"
+
+	unaccent_table = {}
+	for i = 1,string.len(unaccent_from) do
+		unaccent_table[string.sub(unaccent_from, i, i)] =
+		string.sub(unaccent_to, i, i)
+	end
+	unaccent_re = "([\192-\254])"
+	return translatechars(str, unaccent_re, unaccent_table)
+end
 ----------------------------------------------------------------------
 -- function show tables
 ----------------------------------------------------------------------
@@ -483,8 +518,10 @@ function piepan.youtubedl(url)
 	if(n1) then
 		link = string.sub(url,n1+1)
 		link = link:gsub("%b<>", "")
+		link = link:gsub("'", " ")
 		link = link:gsub("%s+", "+")
-		link = link:gsub("'", "+")
+		link = unaccent(link)
+		print("reformated link : " .. link)
 		piepan.me.channel:send(msg_prefix .. "Chargement en cours : [" .. link .. "] ..." .. msg_suffix)
 		print("Loading [" .. link .. "] ...")
 		local file = assert(io.popen('./yt_dl.sh ' .. link, 'r'))
@@ -514,7 +551,7 @@ function piepan.youtubedl(url)
 		else
 			n1, n2 = string.find(output,"[download] File is larger",nil,true)
 			if(n1) then
-				piepan.me.channel:send(msg_prefix .. "Fichier trop volumineux (>20Mo)" .. msg_suffix)
+				piepan.me.channel:send(msg_prefix .. "Fichier trop volumineux (>50Mo)" .. msg_suffix)
 			else
 				print("Failed to find '[avconv] Destination' in " .. output)
 				piepan.me.channel:send(msg_prefix .. "Le téléchargement a merdé." .. msg_suffix)
@@ -582,6 +619,10 @@ function piepan.onMessage(msg)
     	return
     end
     if sounds[search] then
+	if(os.time()<disable_jingle_ts ) then
+		piepan.me.channel:send(msg_prefix .. "Jingles désactivés." .. msg_suffix)
+		return
+	end
 	local soundFile = prefix .. sounds[search]
 	if require_registered and msg.user.userId == nil then
 		msg.user:send("You must be registered on the server to trigger sounds.")
@@ -602,6 +643,13 @@ function piepan.onMessage(msg)
     end
     if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
 	c = commands[search]
+	if require_registered and msg.user.userId == nil then
+		msg.user:send("Vous devez vous enregistrer pour envoyer des commandes.")
+		return
+	end
+
+
+
 	print(flags["mpd_server"] .. "  " .. tostring(flags["mpd_port"]))
 	client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	if("setvol" == c) then
@@ -609,6 +657,46 @@ function piepan.onMessage(msg)
 		vol = math.max(0,math.min(100,vol))
 		client:set_vol(vol)
 		piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
+	elseif("keep" == c) then
+		song = client:currentsong()
+		print("keep: Currently playing " .. song['file'])
+		if(string.starts(song['file'],'download/')) then
+			dest = './download-keep/'
+			-- copy file instead of moving because the song is currently playing
+			ret = assert(io.popen('cp "./' .. song['file'] .. '" ' .. dest, 'r'), "failed to copy file")
+			
+			-- for line in ret:lines()
+			-- do
+			-- 	print(line)
+			-- end
+			-- print(ret)
+			-- todo check cp ret
+			client:update('download-keep') -- udpate mpd database
+			piepan.me.channel:send(msg_prefix .. "Le fichier a été sauvegardé dans le repertoire /download-keep." .. msg_suffix)
+		else 
+			print('Not a downloaded file.')
+			piepan.me.channel:send(msg_prefix .. "Ceci n'est pas un fichier téléchargé." .. msg_suffix)
+		end
+	elseif("next?" == c) then
+		status = client:status()
+		nextid = status['nextsongid']
+		print("Next song id : " .. tostring(nextid))
+		
+		for id, song in pairs(client:playlistinfo()) do
+			-- piepan.showtable(song)
+			-- print("checking song " .. song['Id'])
+			if(song['Id'] == nextid) then
+				summary = piepan.formatSong(song)
+				-- print(summary)
+				piepan.me.channel:send(msg_prefix .. "Prochain morceau : " .. summary .. msg_suffix)
+			end
+		end
+	elseif("enablej" == c) then
+		disable_jingle_ts = 0
+		piepan.me.channel:send(msg_prefix .. "Jingles activés." .. msg_suffix)
+	elseif("disablej" == c) then
+		disable_jingle_ts = os.time() + 60 * 5
+		piepan.me.channel:send(msg_prefix .. "Jingles désactivés pendant 5 minutes." .. msg_suffix)
 	elseif("fadevol" == c) then
 		print("fadevol " .. msg.text)
 		vol = tonumber(string.sub(msg.text,9))
@@ -637,7 +725,7 @@ function piepan.onMessage(msg)
 		client:set_random(val)
 		piepan.me.channel:send("Ok")
 	elseif(msg.text:starts('#consume ')) then
-		val = tonumber(string.sub(msg.text,8))
+		val = tonumber(string.sub(msg.text,9))
 		val = math.max(0,math.min(1,val))
 		client:set_consume(val)
 		piepan.me.channel:send("Ok")
@@ -660,10 +748,11 @@ function piepan.onMessage(msg)
 		print(client:next())
 		piepan.me.channel:send("Ok")
 	elseif("play" == c) then
-		print(client:pause(0))
+		-- print(client:pause(false))
+		print(client:unpause())
 		piepan.me.channel:send("Ok")
 	elseif("pause" == c) then
-		print(client:pause(1))
+		print(client:pause(true))
 		piepan.me.channel:send("Ok")
 	elseif("prev" == c) then
 		print(client:previous())
@@ -674,11 +763,13 @@ function piepan.onMessage(msg)
 		s = s .. "<li>#s : Affiche le morceau en cours de lecture</li>"
 		s = s .. "<li>#v : Affiche le volume actuel</li>"
 		s = s .. "<li>#y -lien- : Télécharge un morceau et l'ajoute à la playlist</li>"
-		s = s .. "<li>#setvol -volume- : Ajuste le volume</li>"
+		s = s .. "<li>#setvol -volume- / #fadevol -volume- : Ajuste le volume à la valeur indiquée</li>"
 		s = s .. "<li>#v+ : Augmente le volume de 5% par '+'</li>"
 		s = s .. "<li>#v- : Diminue le volume de 5% par '-'</li>"
 		s = s .. "<li>#next, #last, #prev, #play, #pause : Contrôles de lecture</li>"
 		s = s .. "<li>#random 0/1, #consume 0/1 : Change les modes de lecture</li>"
+		s = s .. "<li>#keep : copie le fichier en cours de lecture dans un repertoire non temporaire</li>"
+		s = s .. "<li>#disablej : désactive les jingles pendant 5 minutes</li>"
 		s = s .. "</ul></pre>"
 		piepan.me.channel:send(s)
 	elseif("volume" == c) then
