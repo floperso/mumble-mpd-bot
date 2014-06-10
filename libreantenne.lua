@@ -101,10 +101,15 @@ local commands = {
    song = "song",
    listeners = "listeners",
    disablej = "disablej",
-   enablej = "enablej",
+   enablej669 = "enablej",
    keep = "keep",
    n = "next?"
 }
+
+local bans = {
+
+}
+
 
 ----------------------------------------------------------------------
 -- global configuration variables
@@ -135,7 +140,8 @@ local flags = {
 
 -- violet local msg_prefix = "<span style='color:#738'>&#x266B;&nbsp;-&nbsp;"
 -- local msg_prefix = "<span style='color:#384'>&#x266B;&nbsp;-&nbsp;"
-local msg_prefix = "<span style='color:#339933'>&#x266B;&nbsp;-&nbsp;"
+-- local msg_prefix = "<span style='color:#339933'>&#x266B;&nbsp;-&nbsp;"
+local msg_prefix = "<span style='color:#777'>&#x266B;&nbsp;-&nbsp;"
 local msg_suffix = "&nbsp;-&nbsp;&#x266B;</span>"
 
 ----------------------------------------------------------------------
@@ -144,6 +150,75 @@ local msg_suffix = "&nbsp;-&nbsp;&#x266B;</span>"
 local prefix = "jingles/"
 local mpd_connect = mpd_connect
 
+
+function piepan.format_clock(timestamp)
+        timestamp = tonumber(timestamp)
+        return string.format("%.2d:%.2d:%.2d", timestamp/(60*60), timestamp/60%60, timestamp%60)
+end
+
+----------------------------------------------------------------------
+-- format_song function
+----------------------------------------------------------------------
+function piepan.format_song(song)
+        -- piepan.showtable(song)
+        ret = ''
+        if(song['Artist']) then ret = ret .. song['Artist'] .. ' - ' end
+        if(song['Album']) then ret = ret .. song['Album'] .. ' - ' end
+        if(song['Title']) then ret = ret .. song['Title'] end
+        if(song['Date']) then ret = ret .. ' (' .. song['Date'] .. ')' end
+        if('' == ret) then ret = song['file'] end
+        return ret
+end
+
+
+function piepan.send_song_infos()
+	print("Sending song info ...")
+        song = client:currentsong()
+        status = client:status()
+        -- print("Volume : " .. status['volume'])
+        -- piepan.showtable(s)
+        tstr = ''
+        if(status['time']) then
+        	time_pair = piepan.splitPlain(status['time'],':')
+                -- print("Time : " .. status['time'] .. tostring(time_pair[1]))
+                tstr = '[' .. piepan.format_clock(time_pair[1])
+                tstr = tstr .. ' / ' .. piepan.format_clock(time_pair[2]) .. ']'
+        end
+        summary = piepan.format_song(song)
+
+        ret = summary .. ' - ' .. tstr .. ' [vol ' .. tostring(status['volume']) .. '% R' .. (status['random'] or '?') .. ' C' .. (status['consume'] or '?') .. ']'
+                -- msg.user:send(ret)
+        print("Summary : " .. ret)
+        piepan.me.channel:send(msg_prefix .. "Lecture en cours : " .. ret .. msg_suffix)
+end
+----------------------------------------------------------------------
+-- function mpdmonitor : scan for mpd changes
+----------------------------------------------------------------------
+function piepan.mpdmonitor(params)
+	last_song = ''
+	client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
+	while true do
+		-- print("*MON* connecting ...")
+		current_song = client:currentsong()['file'] or ''
+		-- print("*MON* checking song : " .. current_song)
+		if(current_song ~= last_song) then
+			print("*MON* Song changed : " .. current_song)
+			last_song = current_song
+			piepan.send_song_infos()
+		end
+		-- print("*MON* waiting ...")
+		-- time.sleep(1.0)
+		piepan.MPD.sleep(1.0)
+		-- client:idle({"database", "playlist" })
+		-- client:idle({"database", "update", "stored_playlist", "playlist", "player", "mixer", "output_options" })
+		-- print("*MON* stopped waiting.")
+	end
+	client:close()
+end
+function piepan.mpdmonitor_completed(info)
+
+end
+
 ----------------------------------------------------------------------
 -- piepan functions
 ----------------------------------------------------------------------
@@ -151,7 +226,6 @@ function piepan.onConnect()
    if piepan.args.soundboard then
       prefix = piepan.args.soundboard
    end
-   print ("Bridgitte chargée")
    print ("Loading configuration...")
    if (parseConfiguration())
    then
@@ -159,6 +233,9 @@ function piepan.onConnect()
    else
       print("error.")
    end
+   print("Starting monitor ...")
+   piepan.Thread.new(piepan.mpdmonitor,piepan.mpdmonitor_completed,{})
+   
 end
 
 ----------------------------------------------------------------------
@@ -415,10 +492,9 @@ function piepan.splitPlain(s, delim)
 end -- function split
 
 ----------------------------------------------------------------------
--- formatSong function
+-- format_song function
 ----------------------------------------------------------------------
-function piepan.formatSong(song)
-	-- print("formatSong : ")
+function piepan.format_song(song)
 	-- piepan.showtable(song)
 	ret = ''
 	if(song['Artist']) then ret = ret .. song['Artist'] .. ' - ' end
@@ -513,7 +589,10 @@ end
 ----------------------------------------------------------------------
 -- function youtubedl
 ----------------------------------------------------------------------
-function piepan.youtubedl(url)
+function piepan.youtubedl(params)
+	url = piepan.trim(params['url'])
+	user = params['user']
+	print("youtubedl "..user.." : "..url)
 	n1,n2 = string.find(url,' ')
 	if(n1) then
 		link = string.sub(url,n1+1)
@@ -524,7 +603,7 @@ function piepan.youtubedl(url)
 		print("reformated link : " .. link)
 		piepan.me.channel:send(msg_prefix .. "Chargement en cours : [" .. link .. "] ..." .. msg_suffix)
 		print("Loading [" .. link .. "] ...")
-		local file = assert(io.popen('./yt_dl.sh ' .. link, 'r'))
+		local file = assert(io.popen('./yt_dl.sh '.. user .. ' ' .. link, 'r'))
 		local output = file:read('*all')
 		file:close()
 		print(output)
@@ -534,7 +613,7 @@ function piepan.youtubedl(url)
 			if(n3) then
 				file = piepan.trim(string.sub(output,n2,n3))
 				print("Found : [" .. file .. "]")
-				piepan.me.channel:send(msg_prefix .. "Téléchargement terminé : [" .. file .. "]" .. msg_suffix)
+				piepan.me.channel:send(msg_prefix .. "Téléchargement terminé : " .. file .. msg_suffix)
 				client:update('download')
 				-- client:idle('download')
 				-- socket.sleep(5)
@@ -565,12 +644,7 @@ end
 -- function youtubedl_completed
 ----------------------------------------------------------------------
 function piepan.youtubedl_completed(info)
-	print("youtubedl_completed " .. (info or '?'))
-end
-
-function piepan.formatClock(timestamp)
-	timestamp = tonumber(timestamp)
-	return string.format("%.2d:%.2d:%.2d", timestamp/(60*60), timestamp/60%60, timestamp%60)
+	print("youtubedl_completed")
 end
 
 ----------------------------------------------------------------------
@@ -582,7 +656,10 @@ function piepan.fadevol(dest)
 	vol = tonumber(client:status()['volume'])
 	delta = 1
 	print("fadevol vol = " .. tostring(vol))
-	if(vol == dest) then return end
+	if(vol == dest) then
+		-- client:close()
+		return 
+	end
 	if(dest < vol) then delta = - delta end
 	print("fadevol " .. tostring(vol) .. " => " .. tostring(dest) .. " d=" .. tostring(delta))
 	while true do
@@ -595,7 +672,10 @@ function piepan.fadevol(dest)
 		 -- time.sleep(0.2) -- = 5% par seconde
 		piepan.MPD.sleep(0.2)
 	end
+	-- client:close()
 	piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
+	-- client = nil
+	print("fadevol done.")
 end
 
 ----------------------------------------------------------------------
@@ -612,8 +692,8 @@ function piepan.onMessage(msg)
     if msg.user == nil then
         return
     end
-    print("Received message : " .. msg.text) 
-    local search = string.match(msg.text, "#(%w+)")
+    print(msg.user.name .. "> " .. msg.text) 
+    local search = string.match(msg.text, "^#(%w+)")
 
     if not search then
     	return
@@ -647,10 +727,13 @@ function piepan.onMessage(msg)
 		msg.user:send("Vous devez vous enregistrer pour envoyer des commandes.")
 		return
 	end
+	
+
+	-- piepan.showtable(msg.user)
+	-- return
 
 
-
-	print(flags["mpd_server"] .. "  " .. tostring(flags["mpd_port"]))
+	-- print(flags["mpd_server"] .. "  " .. tostring(flags["mpd_port"]))
 	client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	if("setvol" == c) then
 		vol = tonumber(string.sub(msg.text,8))
@@ -686,7 +769,7 @@ function piepan.onMessage(msg)
 			-- piepan.showtable(song)
 			-- print("checking song " .. song['Id'])
 			if(song['Id'] == nextid) then
-				summary = piepan.formatSong(song)
+				summary = piepan.format_song(song)
 				-- print(summary)
 				piepan.me.channel:send(msg_prefix .. "Prochain morceau : " .. summary .. msg_suffix)
 			end
@@ -730,7 +813,8 @@ function piepan.onMessage(msg)
 		client:set_consume(val)
 		piepan.me.channel:send("Ok")
 	elseif("youtube" == c) then
-		piepan.Thread.new(piepan.youtubedl,piepan.youtubedl_completed ,msg.text)
+		
+		piepan.Thread.new(piepan.youtubedl,piepan.youtubedl_completed ,{url = msg.text, user = msg.user.name})
 	elseif("listeners" == c) then
 		listeners = get_listeners("212.129.4.80",8000)
 		print("Listeners : " .. tostring(listeners))
@@ -776,24 +860,8 @@ function piepan.onMessage(msg)
 		s = client:status()
 		piepan.me.channel:send(msg_prefix .. "Volume : " .. tostring(s['volume']) .. "%" .. msg_suffix)
 	elseif ("song" == c) then
-		print("Sending song info ...")
-		song = client:currentsong()
-		status = client:status()
-		print("Volume : " .. status['volume'])
-		-- piepan.showtable(s)
-		tstr = ''
-		if(status['time']) then
-			time_pair = piepan.splitPlain(status['time'],':')
-			-- print("Time : " .. status['time'] .. tostring(time_pair[1]))
-			tstr = '[' .. piepan.formatClock(time_pair[1])
-			tstr = tstr .. ' / ' .. piepan.formatClock(time_pair[2]) .. ']'
-		end
-		summary = piepan.formatSong(song)
-		
-		ret = summary .. ' - ' .. tstr .. ' [vol ' .. tostring(status['volume']) .. '% R' .. (status['random'] or '?') .. ' C' .. (status['consume'] or '?') .. ']'
-		-- msg.user:send(ret)
-		print("Summary : " .. ret)
-		piepan.me.channel:send(msg_prefix .. ret .. msg_suffix)
+		piepan.send_song_infos()
 	end
+	-- client:close()
     end
 end
