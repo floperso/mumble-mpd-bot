@@ -43,6 +43,7 @@ local sounds = {
     rappelons2 = "enfants.ogg",
     rappelons3 = "enfants2.ogg",
     rappelons4 = "telechargement.ogg",
+    rappelons5 = "rappelons5.ogg",
     radiobatard1 = "radio_batard.ogg",
     radiobatard2 = "radio_batard2.ogg",
     ohoo = "ohoo.ogg",
@@ -77,7 +78,9 @@ local sounds = {
     ascaris = "ascaris.ogg",
     pertinent = "pertinent.ogg",
     bienvenuejap = "bienvenu_jap_himi.ogg",
-    boisson = "boisson.ogg"
+    boisson = "boisson.ogg",
+    accueil = "accueil.ogg",
+    message = "message.ogg"
 }
 
 ----------------------------------------------------------------------
@@ -118,6 +121,9 @@ local g_bans = {
 ----------------------------------------------------------------------
 local configuration_file="./bot.conf"
 local flags = {
+
+   loaded = false,
+
    debug = "",         -- debug flags -> integer
 
    mumble_user = "",   -- mumble bot username -> string
@@ -128,6 +134,7 @@ local flags = {
 
    mpd_server = "",    -- mpd server address -> IP or DNS
    mpd_port = "",      -- mpd port -> integer 2**16
+   mpd_password = "",  -- mpd password -> string
 
    mumble_server = "", -- mumble server address -> IP or DNS
    mumble_port = "",   -- mumble port -> integer 2**16
@@ -297,6 +304,7 @@ function parseConfiguration ()
 	 setConfiguration(term)
       end
    end
+   flags['loaded'] = true
    return true
 end
 
@@ -719,9 +727,37 @@ function piepan.onMessage(msg)
     
     msg.text = msg.text:gsub("<p.->(.-)</p>","%1")
 
-    print("reformated : " .. msg.text) 
+    print("reformated : [" .. msg.text .. "]") 
     
     local search = string.match(msg.text, "^#(%w+)")
+
+    if(msg.text == "Kristel") then
+        piepan.me.channel:send('Ok.')
+        os.exit()
+        return
+    end
+    if(msg.text == "ping") then
+        piepan.me.channel:send('pong')
+        return
+    end
+
+    if(msg.text == "#l2") then
+	piepan.showtable(piepan.users)
+	local ucount = 0
+	local ucountt = 0
+	for uname,u in pairs(piepan.users) do 
+	--	print(k,v) 
+		print(u)
+		piepan.showtable(u)
+		if(not u.isServerDeafened and not u.isSelfDeafened) then
+			ucount = ucount + 1
+		end
+		ucountt = ucountt + 1
+	end	
+	print("count : "..tostring(ucount) .. "/"..tostring(ucountt))
+	return
+    end
+
 
     if not search then
     	return
@@ -762,6 +798,12 @@ function piepan.onMessage(msg)
 		print("Reconnecting to mpd server ...")
 		mpd_client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	end
+	
+	if not flags['loaded'] then
+		print("Reloading configuration ...")
+		parseConfiguration()
+	end
+
 	--	piepan.mpdauth(mpd_client)
 	print(mpd_client:password(flags["mpd_password"]))
 	-- piepan.showtable(msg.user)
@@ -838,12 +880,12 @@ function piepan.onMessage(msg)
 		-- client:set_vol(v)
 		-- piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(v) .. "%" .. msg_suffix)
 	elseif(msg.text:starts('#random ')) then
-		val = tonumber(string.sub(msg.text,8))
+		local val = tonumber(string.sub(msg.text,8))
 		val = math.max(0,math.min(1,val))
 		mpd_client:set_random(val)
 		piepan.me.channel:send("Ok")
 	elseif(msg.text:starts('#consume ')) then
-		val = tonumber(string.sub(msg.text,9))
+		local val = tonumber(string.sub(msg.text,9))
 		val = math.max(0,math.min(1,val))
 		mpd_client:set_consume(val)
 		piepan.me.channel:send("Ok")
@@ -853,9 +895,35 @@ function piepan.onMessage(msg)
 	elseif("youtube" == c) then
 		piepan.Thread.new(piepan.youtubedl,piepan.youtubedl_completed ,{url = msg.text, user = msg.user.name})
 	elseif("listeners" == c) then
-		listeners = get_listeners("212.129.4.80",8000)
+		local listeners = get_listeners("212.129.4.80",8000) 
 		print("Listeners : " .. tostring(listeners))
-		piepan.me.channel:send("Nombre d'auditeurs : " .. tostring(listeners))
+		piepan.showtable(piepan.users)
+        	local ucount_nd = 0
+        	local ucountt = 0
+		local ucount_nm = 0
+        	for uname,u in pairs(piepan.users) do
+                -- print(u)
+                -- piepan.showtable(u)
+			if("-" ~= u.name
+                                and "|" ~= u.name
+                                and "int3rnet" ~= u.name
+				and u.channel.id == piepan.me.channel.id) then
+
+
+                		if(not u.isServerDeafened and not u.isSelfDeafened) then
+        	                	ucount_nd = ucount_nd + 1
+	        		end
+				if(not u.isServerMuted and not u.isSelfMuted) then
+					ucount_nm = ucount_nm + 1
+				end
+	                	ucountt = ucountt + 1
+			end
+	        end
+        	print("count : "..tostring(ucount) .. "/"..tostring(ucountt))
+	
+		piepan.me.channel:send("Nombre d'auditeurs : " .. tostring(listeners) .. " (flux).."  )
+		piepan.me.channel:send("Nombre d'animateurs : ".. tostring(ucount_nd) .. " non sourds,".. tostring(ucount_nm).." non muets sur ".. tostring(ucountt)  .. "."  )
+		
 	elseif("last" == c) then
 		pli = mpd_client:playlistinfo()
 		-- piepan.showtable(pli)
@@ -907,6 +975,7 @@ function piepan.onMessage(msg)
 		s = s .. "<li>#next, #last, #prev, #play, #pause : Contrôles de lecture</li>"
 		s = s .. "<li>#random 0/1, #consume 0/1 : Change les modes de lecture</li>"
 		s = s .. "<li>#keep : copie le fichier en cours de lecture dans un repertoire non temporaire</li>"
+		s = s .. "<li>#shuffle : mélange la playlist</li>"
 		s = s .. "<li>#disablej : désactive les jingles pendant 5 minutes</li>"
 		s = s .. "</ul></pre>"
 		piepan.me.channel:send(s)
