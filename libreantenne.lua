@@ -18,7 +18,7 @@ local should_move = false
 
 local disable_jingle_ts = 0
 
-local mpd_client = {}
+local mpd_client = {loaded = false}
 
 ----------------------------------------------------------------------
 -- Table with keys being the keywords and values being the sound files
@@ -109,7 +109,8 @@ local commands = {
    keep = "keep",
    n = "next?",
    stop = "stop",
-   shuffle = "shuffle"
+   shuffle = "shuffle",
+   xfade = "xfade"
 }
 
 local g_bans = {
@@ -208,6 +209,15 @@ function piepan.mpdmonitor(params)
 	local last_song = ''
 	-- client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	while true do
+		if not mpd_client or not mpd_client.loaded or mpd_client.password == nil then
+                	print("Reconnecting to mpd server ...")
+                	mpd_client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
+                	mpd_client.loaded = true
+
+			-- we do not need auth here; skip the password message
+	        end
+
+
 		-- print("*MON* connecting ...")
 		local current_song = mpd_client:currentsong()['file'] or ''
 		-- print("*MON* checking song : " .. current_song)
@@ -251,6 +261,7 @@ function piepan.onConnect()
    end
    print('Connecting to MPD server '.. flags["mpd_server"] ..':' .. flags["mpd_port"] ..' ...')
    mpd_client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
+   mpd_client.loaded = true
    piepan.mpdauth(mpd_client)
    print("Starting monitor ...")
    piepan.Thread.new(piepan.mpdmonitor,piepan.mpdmonitor_completed,{})
@@ -794,9 +805,10 @@ function piepan.onMessage(msg)
 
 	-- we may have lost the connection since the initial auth	
 	
-	if not mpd_client or mpd_client.password == nil then
+	if not mpd_client or not mpd_client.loaded or mpd_client.password == nil then
 		print("Reconnecting to mpd server ...")
 		mpd_client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
+		mpd_client.loaded = true
 	end
 	
 	if not flags['loaded'] then
@@ -879,6 +891,11 @@ function piepan.onMessage(msg)
 		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,v)
 		-- client:set_vol(v)
 		-- piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(v) .. "%" .. msg_suffix)
+	elseif(msg.text:starts('#xfade ')) then
+		local val = tonumber(string.sub(msg.text,7))
+		val = math.max(0,math.min(10,val))
+		mpd_client:set_crossfade(val)
+		piepan.me.channel:send("Ok")
 	elseif(msg.text:starts('#random ')) then
 		local val = tonumber(string.sub(msg.text,8))
 		val = math.max(0,math.min(1,val))
@@ -909,7 +926,6 @@ function piepan.onMessage(msg)
                                 and "int3rnet" ~= u.name
 				and u.channel.id == piepan.me.channel.id) then
 
-
                 		if(not u.isServerDeafened and not u.isSelfDeafened) then
         	                	ucount_nd = ucount_nd + 1
 	        		end
@@ -919,10 +935,10 @@ function piepan.onMessage(msg)
 	                	ucountt = ucountt + 1
 			end
 	        end
-        	print("count : "..tostring(ucount) .. "/"..tostring(ucountt))
+        	-- print("count : "..tostring(ucount) .. "/"..tostring(ucountt))
 	
 		piepan.me.channel:send("Nombre d'auditeurs : " .. tostring(listeners) .. " (flux).."  )
-		piepan.me.channel:send("Nombre d'animateurs : ".. tostring(ucount_nd) .. " non sourds,".. tostring(ucount_nm).." non muets sur ".. tostring(ucountt)  .. "."  )
+		piepan.me.channel:send("Nombre d'animateurs : ".. tostring(ucount_nd) .. " non sourds, ".. tostring(ucount_nm).." non muets sur ".. tostring(ucountt)  .. "."  )
 		
 	elseif("last" == c) then
 		pli = mpd_client:playlistinfo()
@@ -973,7 +989,7 @@ function piepan.onMessage(msg)
 		s = s .. "<li>#v+ : Augmente le volume de 5% par '+'</li>"
 		s = s .. "<li>#v- : Diminue le volume de 5% par '-'</li>"
 		s = s .. "<li>#next, #last, #prev, #play, #pause : Contrôles de lecture</li>"
-		s = s .. "<li>#random 0/1, #consume 0/1 : Change les modes de lecture</li>"
+		s = s .. "<li>#random 0/1, #consume 0/1, #xfade 0..N : Change les modes de lecture</li>"
 		s = s .. "<li>#keep : copie le fichier en cours de lecture dans un repertoire non temporaire</li>"
 		s = s .. "<li>#shuffle : mélange la playlist</li>"
 		s = s .. "<li>#disablej : désactive les jingles pendant 5 minutes</li>"
