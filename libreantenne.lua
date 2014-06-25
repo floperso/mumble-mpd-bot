@@ -110,7 +110,9 @@ local commands = {
    n = "next?",
    stop = "stop",
    shuffle = "shuffle",
-   xfade = "xfade"
+   xfade = "xfade",
+   testfade = "testfade",
+   ninjanext = "ninjanext"
 }
 
 local g_bans = {
@@ -157,7 +159,7 @@ local msg_suffix = "&nbsp;-&nbsp;&#x266B;</span>"
 ----------------------------------------------------------------------
 -- Sound file path prefix
 ----------------------------------------------------------------------
-local prefix = "jingles/"
+local jingles_path = "jingles/"
 local mpd_connect = mpd_connect
 
 
@@ -210,7 +212,7 @@ function piepan.mpdmonitor(params)
 	-- client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	while true do
 		if not mpd_client or not mpd_client.loaded or mpd_client.password == nil then
-                	print("Reconnecting to mpd server ...")
+                	print("*MON* Reconnecting to mpd server ...")
                 	mpd_client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
                 	mpd_client.loaded = true
 
@@ -249,9 +251,6 @@ function piepan.mpdauth(mpd_client)
 end
 
 function piepan.onConnect()
-   if piepan.args.soundboard then
-      prefix = piepan.args.soundboard
-   end
    print ("Loading configuration...")
    if (parseConfiguration())
    then
@@ -490,7 +489,7 @@ function get_listeners(server, port)
 end
 
 ----------------------------------------------------------------------
--- jingle object
+-- jingle object TODO
 ----------------------------------------------------------------------
 local jingle = {}
 
@@ -671,7 +670,7 @@ function piepan.youtubedl(params)
 				piepan.me.channel:send('# ' .. msg_prefix .. "Fichier trop volumineux (>70Mo)" .. msg_suffix)
 			else
 				print("Failed to find '[avconv] Destination' in " .. output)
-				piepan.me.channel:send(msg_prefix .. "Le téléchargement a merdé." .. msg_suffix)
+				piepan.me.channel:send('# ' .. msg_prefix .. "Le téléchargement a merdé." .. msg_suffix)
 			end
 		end
 		-- piepan.me.channel:send(output)
@@ -685,42 +684,190 @@ function piepan.youtubedl_completed(info)
 	print("youtubedl_completed")
 end
 
+
+function erf(x)
+    -- constants
+    local a1 =  0.254829592
+    local a2 = -0.284496736
+    local a3 =  1.421413741
+    local a4 = -1.453152027
+    local a5 =  1.061405429
+    local p  =  0.3275911
+
+    -- Save the sign of x
+    local sign = 1
+    if x < 0 then sign = -1 end
+    x = math.abs(x)
+
+    -- A&S formula 7.1.26
+    local t = 1.0/(1.0 + p*x)
+    local y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*math.exp(-x*x)
+
+    return sign*y
+end
+
+
+-- fancy display for debug
+function dispvol(t,v)
+        local s = ''
+        for i=0,v do s = s .. "-" end
+        print(math.floor( 0.5 + t ) .. " " .. s .. " " .. tostring(v))
+end
+
+
+-- performs a smooth fade between to values. r is the radius of the curve, speed is the loop frequency (Hz)
+function fadeerf(from,to,r,speed) -- r should be within 0.5 and 1.0 -- speed 1..10
+        local delta = math.abs(to - from)
+        local sign = 1
+        if to < from then sign = -1 end
+        -- print("fade from " .. from .. " to " .. to .. " s=" .. sign .. " r=" ..r.." s="..speed)
+        local t = 0
+        local v = from
+        while t <= delta / speed and v ~= to do
+                local e = ( speed * 2 * t / delta - 1 ) * math.pi * r
+                v = from + sign * math.floor( 0.5 + delta * ( 1 + erf(e) ) / 2)
+                dispvol(t,v)
+                t = t + 1 / speed
+                piepan.MPD.sleep(0.2)
+		mpd_client:set_vol(v)
+        end
+end
+
+
+-- predefined params for fade types
+local fade_params = {
+        fade =     {r = 0.6, speed = 5},
+        fastfade = {r = 0.9, speed = 8},
+        slowfade = {r = 0.5, speed = 4}
+}
+
+
+-- start a sequence of transitions
+-- example : mpd_transition({'fade10','fade40','fastfade0','slowfadeback'})
+function mpd_transition(args)
+        local old_vol = tonumber(mpd_client:status()['volume']) 
+        local cur_vol = old_vol
+        local r
+        local speed
+        for _,t in pairs(args) do
+                if(t:starts("fade") or t:starts("fastfade") or t:starts("slowfade")) then
+
+                        local ftype
+                        local params
+                        if(t:starts("fade")) then
+                                ftype = string.sub(t,5)
+                        elseif(t:starts("fastfade")) then
+                                ftype = string.sub(t,9)
+                        elseif(t:starts("slowfade")) then
+                                ftype = string.sub(t,9)
+                        end
+
+                        local func = string.sub(t,0,string.len(t) - string.len(ftype))
+                        params = fade_params[func]
+
+
+                        if("back" == ftype) then
+                                -- fade back to stored volume
+                                fadeerf(cur_vol,old_vol,params['r'],params['speed'])
+                                cur_vol = tonumber(mpd_client:status()['volume'])
+                        else
+                                local vd = math.min(100,math.max(0,tonumber(ftype)))
+                                if( nil == vd ) then
+                                        print("bad arg : " .. ftype)
+                                else
+                                        fadeerf(cur_vol,vd,params['r'],params['speed'])
+                                        cur_vol = tonumber(mpd_client:status()['volume'])
+                                end
+                        end
+                else
+                        if("next" == t) then
+                                print("* NEXT *")
+				print(mpd_client:next())
+                        elseif(t:starts("wait")) then
+                                local amount = math.max(0,math.min(20,tonumber(string.sub(t,5))))
+                                print("* WAIT ["..amount.."] *")
+                                piepan.MPD.sleep(amount)
+
+                        elseif(t:starts("jingle")) then
+                                local jtype = string.sub(t,7)
+                                print("* JINGLE ["..jtype.."] *")
+				play_jingle(jtype ..".ogg")
+                        end
+                end
+
+        end
+
+end
+
+
 ----------------------------------------------------------------------
 -- function fadevol
 ----------------------------------------------------------------------
-function piepan.fadevol(dest)
-	-- client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
-	-- print("fadevol dest = " .. tostring(dest))
-	vol = tonumber(mpd_client:status()['volume'])
-	delta = 1
-	-- print("fadevol vol = " .. tostring(vol))
-	if(vol == dest) then
-		-- client:close()
-		return 
-	end
-	if(dest < vol) then delta = - delta end
-	print("fadevol " .. tostring(vol) .. " => " .. tostring(dest) .. " d=" .. tostring(delta))
-	while true do
-		if delta>0 and dest<=vol then break end
-		if delta<0 and dest>=vol then break end
-		vol = vol + delta
-		-- print("fadevol => " .. tostring(vol))
-		mpd_client:set_vol(vol)
-		--#print("dv " + str(vol) +" %")$
-		 -- time.sleep(0.2) -- = 5% par seconde
-		piepan.MPD.sleep(0.2)
-	end
-	-- client:close()
-	piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
-	-- client = nil
-	-- print("fadevol done.")
+function piepan.fadevol(params)
+
+	
+        if( nil ~= params['trans']) then
+                mpd_transition(params['trans'])
+		return
+        end
+        
+	local dest = params['dest']
+	print("fadevol dest = " .. tostring(dest))
+        vol = tonumber(mpd_client:status()['volume'])
+        delta = 1
+        -- print("fadevol vol = " .. tostring(vol))
+        if(vol == dest) then
+                -- client:close()
+                return
+        end
+        if(dest < vol) then delta = - delta end
+        print("fadevol " .. tostring(vol) .. " => " .. tostring(dest) .. " d=" .. tostring(delta))
+        while true do
+                if delta>0 and dest<=vol then break end
+                if delta<0 and dest>=vol then break end
+                vol = vol + delta
+                -- print("fadevol => " .. tostring(vol))
+                mpd_client:set_vol(vol)
+                --#print("dv " + str(vol) +" %")$
+                 -- time.sleep(0.2) -- = 5% par seconde
+                piepan.MPD.sleep(0.2)
+        end
+        -- client:close()
+        piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
+        -- client = nil
+        -- print("fadevol done.")
 end
 
 ----------------------------------------------------------------------
 -- function fadevol_completed
 ----------------------------------------------------------------------
 function piepan.fadevol_completed(info)
-	-- print("fadevol_completed " .. (info or '?'))
+        -- print("fadevol_completed " .. (info or '?'))
+end
+
+
+function play_jingle(file)
+	if(os.time()<disable_jingle_ts ) then
+                piepan.me.channel:send(msg_prefix .. "Jingles désactivés." .. msg_suffix)
+                return
+        end
+        local soundFile = jingles_path .. file
+        if require_registered and msg.user.userId == nil then
+                msg.user:send("You must be registered on the server to trigger sounds.")
+                return
+        end
+        if piepan.Audio.isPlaying() and not interrupt_sounds then
+                return
+        end
+        if piepan.me.channel ~= msg.user.channel then
+                if not should_move then
+                        return
+                end
+                piepan.me:moveTo(msg.user.channel)
+        end
+
+        piepan.Audio.stop()
+        piepan.me.channel:play(soundFile)
 end
 
 ----------------------------------------------------------------------
@@ -774,27 +921,8 @@ function piepan.onMessage(msg)
     	return
     end
     if sounds[search] then
-	if(os.time()<disable_jingle_ts ) then
-		piepan.me.channel:send(msg_prefix .. "Jingles désactivés." .. msg_suffix)
-		return
-	end
-	local soundFile = prefix .. sounds[search]
-	if require_registered and msg.user.userId == nil then
-		msg.user:send("You must be registered on the server to trigger sounds.")
-		return
-	end
-	if piepan.Audio.isPlaying() and not interrupt_sounds then
-		return
-	end
-	if piepan.me.channel ~= msg.user.channel then
-		if not should_move then
-			return
-		end
-		piepan.me:moveTo(msg.user.channel)
-	end
-
-	piepan.Audio.stop()
-	piepan.me.channel:play(soundFile)
+    	play_jingle(sounds[search])
+	return
     end
     if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
 	c = commands[search]
@@ -874,13 +1002,13 @@ function piepan.onMessage(msg)
 		vol = tonumber(string.sub(msg.text,9))
 		vol = math.max(0,math.min(100,vol))
 		-- piepan.fadevol(vol)
-		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,vol)
+		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=vol})
 	elseif(msg.text:starts('#v+')) then
 		print("V+" .. tostring(piepan.countsubstring(msg.text,'+')))
 		s = mpd_client:status()
 		v = tonumber(s['volume'])
 		v = math.min(100,v + 5 * piepan.countsubstring(msg.text,'+'))
-		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,v)
+		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=v})
 		-- client:set_vol(v)
 		-- piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(v) .. "%" .. msg_suffix)
 	elseif(msg.text:starts('#v-')) then
@@ -888,7 +1016,7 @@ function piepan.onMessage(msg)
 		s = mpd_client:status()
 		v = tonumber(s['volume'])
 		v = math.max(0,v - 5 * piepan.countsubstring(msg.text,'-'))
-		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,v)
+		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=v})
 		-- client:set_vol(v)
 		-- piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(v) .. "%" .. msg_suffix)
 	elseif(msg.text:starts('#xfade ')) then
@@ -911,6 +1039,11 @@ function piepan.onMessage(msg)
                 piepan.me.channel:send("Ok")
 	elseif("youtube" == c) then
 		piepan.Thread.new(piepan.youtubedl,piepan.youtubedl_completed ,{url = msg.text, user = msg.user.name})
+	elseif("testfade" == c) then
+		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=nil,trans={"fade20","fadeback"}})
+	elseif("ninjanext" == c) then
+		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=nil,
+			trans={"slowfade5","next","fadeback"}})
 	elseif("listeners" == c) then
 		local listeners = get_listeners("212.129.4.80",8000) 
 		print("Listeners : " .. tostring(listeners))
