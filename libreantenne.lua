@@ -11,7 +11,7 @@
 local require_registered = true
 
 -- Boolean if sounds should stop playing when another is triggered
-local interrupt_sounds = false
+local interrupt_sounds = true
 
 -- Boolean if the bot should move into the user's channel to play the sound
 local should_move = false
@@ -112,7 +112,8 @@ local commands = {
    shuffle = "shuffle",
    xfade = "xfade",
    testfade = "testfade",
-   ninjanext = "ninjanext"
+   ninjanext = "ninjanext",
+   jingle1 = "jingle1"
 }
 
 local g_bans = {
@@ -728,7 +729,7 @@ function fadeerf(from,to,r,speed) -- r should be within 0.5 and 1.0 -- speed 1..
                 v = from + sign * math.floor( 0.5 + delta * ( 1 + erf(e) ) / 2)
                 dispvol(t,v)
                 t = t + 1 / speed
-                piepan.MPD.sleep(0.2)
+                piepan.MPD.sleep( 1 / speed )
 		mpd_client:set_vol(v)
         end
 end
@@ -846,7 +847,7 @@ function piepan.fadevol_completed(info)
 end
 
 
-function play_jingle(file)
+function play_jingle(msg,file)
 	if(os.time()<disable_jingle_ts ) then
                 piepan.me.channel:send(msg_prefix .. "Jingles désactivés." .. msg_suffix)
                 return
@@ -867,6 +868,8 @@ function play_jingle(file)
         end
 
         piepan.Audio.stop()
+
+	print("Playing jingle ["..soundFile.."]")
         piepan.me.channel:play(soundFile)
 end
 
@@ -921,7 +924,7 @@ function piepan.onMessage(msg)
     	return
     end
     if sounds[search] then
-    	play_jingle(sounds[search])
+    	play_jingle(msg,sounds[search])
 	return
     end
     if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
@@ -1041,6 +1044,9 @@ function piepan.onMessage(msg)
 		piepan.Thread.new(piepan.youtubedl,piepan.youtubedl_completed ,{url = msg.text, user = msg.user.name})
 	elseif("testfade" == c) then
 		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=nil,trans={"fade20","fadeback"}})
+	elseif("jingle1" == c) then
+		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=nil,
+                        trans={"fade10","jingleradio_batard","fadeback"}})
 	elseif("ninjanext" == c) then
 		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=nil,
 			trans={"slowfade5","next","fadeback"}})
