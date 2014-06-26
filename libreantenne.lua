@@ -976,7 +976,7 @@ function piepan.onMessage(msg)
 		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,
                         trans={"fade10","jingleradio_batard","fadeback"}})
 	elseif("ninjanext" == c) then
-		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=nil,
+		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,
 			trans={"slowfade5","next","fadeback"}})
 	elseif("listeners" == c) then
 		local listeners = get_listeners("212.129.4.80",8000) 
