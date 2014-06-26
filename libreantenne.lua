@@ -20,105 +20,6 @@ local disable_jingle_ts = 0
 
 local mpd_client = {loaded = false}
 
-----------------------------------------------------------------------
--- Table with keys being the keywords and values being the sound files
-----------------------------------------------------------------------
-local sounds = {
-    tvois = "tvois.ogg",
-    chaud1 = "chaud1.ogg",
-    chaud2 = "chaud2.ogg",
-    chaud3 = "chaud3.ogg",
-    chaud4 = "chaud4.ogg",
-    chaud5 = "chaud5.ogg",
-    chaud6 = "chaud_himi2.ogg",
-    chaud7 = "chaud_est.ogg",
-    quoinon = "quoi_non.ogg",
-    cage = "cage.ogg",
-    enerve = "enerve.ogg",
-    fouet1 = "fouet1.ogg",
-    fouet2 = "fouet2.ogg",
-    pantalon= "pantalon.ogg",
-    pantalon2= "pantalon2.ogg",
-    rappelons1 = "merde.ogg",
-    rappelons2 = "enfants.ogg",
-    rappelons3 = "enfants2.ogg",
-    rappelons4 = "telechargement.ogg",
-    rappelons5 = "rappelons5.ogg",
-    radiobatard1 = "radio_batard.ogg",
-    radiobatard2 = "radio_batard2.ogg",
-    ohoo = "ohoo.ogg",
-    paspossible = "pas_possible.ogg",
-    microco = "micro_co.ogg",
-    fdp = "fdp.ogg",
-    chagasse = "chagasse.ogg",
-    sodo = "sodo.ogg",
-    faim = "faim.ogg",
-    rire1 = "rire_crack.ogg",
-    shoote = "shoot.ogg",
-    flo1 = "flo1.ogg",
-    flo2 = "bonjour_flo2.ogg",
-    mens = "menstruations.ogg",
-    re = "re.ogg",
-    combat = "combat_himi.ogg",
-    yeux1 = "yeux_ciel.ogg",
-    yeux2 = "baisse_les_yeux.ogg",
-    bienvenue1 = "bienvenue_triskel.ogg",
-    bienvenue2 = "bienvenue_himi.ogg",
-    penis = "penis.ogg",
-    encore = "encore.ogg",
-    culotte = "culotte.ogg",
-    bite = "bite.ogg",
-    batard = "batard.ogg",
-    businessman = "businessman.ogg",
-    puteflo = "puteflo.ogg",
-    con2 = "con2.ogg",
-    aahh = "aahh.ogg",
-    zoo1 = "zoo1.ogg",
-    zoo2 = "zoo2.ogg",
-    ascaris = "ascaris.ogg",
-    pertinent = "pertinent.ogg",
-    bienvenuejap = "bienvenu_jap_himi.ogg",
-    boisson = "boisson.ogg",
-    accueil = "accueil.ogg",
-    message = "message.ogg"
-}
-
-----------------------------------------------------------------------
--- commands array
-----------------------------------------------------------------------
-local commands = {
-   setvol = "setvol",
-   v = "volume",
-   volume = "volume",
-   youtube = "youtube",
-   y = "youtube",
-   last = "last",
-   next = "next",
-   prev = "prev",
-   play = "play",
-   pause = "pause",
-   s = "song",
-   random = "random",
-   consume = "consume",
-   help = "help",
-   fadevol = "fadevol",
-   song = "song",
-   listeners = "listeners",
-   disablej = "disablej",
-   enablej669 = "enablej",
-   keep = "keep",
-   n = "next?",
-   stop = "stop",
-   shuffle = "shuffle",
-   xfade = "xfade",
-   testfade = "testfade",
-   ninjanext = "ninjanext",
-   jingle1 = "jingle1"
-}
-
-local g_bans = {
-}
-
 
 ----------------------------------------------------------------------
 -- global configuration variables
@@ -490,15 +391,53 @@ function get_listeners(server, port)
 end
 
 ----------------------------------------------------------------------
--- jingle object TODO
+-- jingle object
 ----------------------------------------------------------------------
-local jingle = {}
+local jingle = {
+	loaded = false,
+        files = {} -- do not access directly this member, use getfile instead
+}
 
 function jingle:new ()
-   
+   -- placeholder
 end
 
 function jingle:load ()
+	print("Loading jingles ...")
+        -- clear existing list
+        for k in pairs (jingle.files) do
+                jingle.files[k] = nil
+        end
+        jingle.files = {}
+
+        -- call subsystem ls
+        callit = os.tmpname()
+        os.execute("ls -a1 ".. jingles_path .. " >"..callit)
+        f = io.open(callit,"r")
+        rv = f:read("*all")
+        f:close()
+        os.remove(callit)
+
+        -- parse ls output and store filenames in jingle.files
+        local from  = 1
+        local delim_from, delim_to = string.find( rv, "\n", from  )
+        while delim_from do
+                local f = string.sub( rv, from , delim_from-1 )
+                if(string.ends(f,'.ogg')) then
+                        local alias = string.sub(f,0,string.len(f)-4)
+                        jingle.files[alias] = f
+                end
+                from  = delim_to + 1
+                delim_from, delim_to = string.find( rv, "\n", from  )
+        end
+
+        jingle.loaded = true
+end
+
+-- return the filename of the requested jingle, or nil
+function jingle:getfile(name)
+        if(not jingle.loaded) then jingle.load() end
+        return jingle.files[name]
 end
 
 ----------------------------------------------------------------------
@@ -792,7 +731,7 @@ function mpd_transition(args)
                         elseif(t:starts("jingle")) then
                                 local jtype = string.sub(t,7)
                                 print("* JINGLE ["..jtype.."] *")
-				play_jingle(jtype ..".ogg")
+				play_jingle(nil,jtype ..".ogg")
                         end
                 end
 
@@ -804,7 +743,7 @@ end
 ----------------------------------------------------------------------
 -- function fadevol
 ----------------------------------------------------------------------
-function piepan.fadevol(params)
+function piepan.trans_thread(params)
 
 	
         if( nil ~= params['trans']) then
@@ -842,25 +781,27 @@ end
 ----------------------------------------------------------------------
 -- function fadevol_completed
 ----------------------------------------------------------------------
-function piepan.fadevol_completed(info)
+function piepan.trans_thread_completed(info)
         -- print("fadevol_completed " .. (info or '?'))
 end
 
 
 function play_jingle(msg,file)
+	
+	print("play_jingle " .. file)
 	if(os.time()<disable_jingle_ts ) then
                 piepan.me.channel:send(msg_prefix .. "Jingles désactivés." .. msg_suffix)
                 return
         end
         local soundFile = jingles_path .. file
-        if require_registered and msg.user.userId == nil then
+        if nil ~= msg and require_registered and msg.user.userId == nil then
                 msg.user:send("You must be registered on the server to trigger sounds.")
                 return
         end
         if piepan.Audio.isPlaying() and not interrupt_sounds then
                 return
         end
-        if piepan.me.channel ~= msg.user.channel then
+        if nil ~= msg and piepan.me.channel ~= msg.user.channel then
                 if not should_move then
                         return
                 end
@@ -880,10 +821,12 @@ function piepan.onMessage(msg)
     if msg.user == nil then
         return
     end
-    if g_bans[msg.user.name] then
+    --[[ if g_bans[msg.user.name] then
     	msg.user:send("You have been banned.")
 	return
     end
+    --]]
+
     print(msg.user.name .. "> " .. msg.text) 
     
     msg.text = msg.text:gsub("<p.->(.-)</p>","%1")
@@ -902,33 +845,18 @@ function piepan.onMessage(msg)
         return
     end
 
-    if(msg.text == "#l2") then
-	piepan.showtable(piepan.users)
-	local ucount = 0
-	local ucountt = 0
-	for uname,u in pairs(piepan.users) do 
-	--	print(k,v) 
-		print(u)
-		piepan.showtable(u)
-		if(not u.isServerDeafened and not u.isSelfDeafened) then
-			ucount = ucount + 1
-		end
-		ucountt = ucountt + 1
-	end	
-	print("count : "..tostring(ucount) .. "/"..tostring(ucountt))
-	return
-    end
 
-
-    if not search then
+    if not search then -- string not starting with # => ignore
     	return
     end
-    if sounds[search] then
-    	play_jingle(msg,sounds[search])
+    local jingle_file = jingle:getfile(search)
+    -- print("jingle : " .. jingle_file)
+    if nil ~= jingle_file then
+    	play_jingle(msg,jingle_file)
 	return
     end
-    if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
-	c = commands[search]
+    --if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
+	local c = search
 	if require_registered and msg.user.userId == nil then
 		msg.user:send("Vous devez vous enregistrer pour envoyer des commandes.")
 		return
@@ -980,7 +908,7 @@ function piepan.onMessage(msg)
 			print('Not a downloaded file.')
 			piepan.me.channel:send(msg_prefix .. "Ceci n'est pas un fichier téléchargé." .. msg_suffix)
 		end
-	elseif("next?" == c) then
+	elseif("n" == c) then
 		status = mpd_client:status()
 		nextid = status['nextsongid']
 		print("Next song id : " .. tostring(nextid))
@@ -1005,13 +933,13 @@ function piepan.onMessage(msg)
 		vol = tonumber(string.sub(msg.text,9))
 		vol = math.max(0,math.min(100,vol))
 		-- piepan.fadevol(vol)
-		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=vol})
+		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=vol})
 	elseif(msg.text:starts('#v+')) then
 		print("V+" .. tostring(piepan.countsubstring(msg.text,'+')))
 		s = mpd_client:status()
 		v = tonumber(s['volume'])
 		v = math.min(100,v + 5 * piepan.countsubstring(msg.text,'+'))
-		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=v})
+		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=v})
 		-- client:set_vol(v)
 		-- piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(v) .. "%" .. msg_suffix)
 	elseif(msg.text:starts('#v-')) then
@@ -1019,7 +947,7 @@ function piepan.onMessage(msg)
 		s = mpd_client:status()
 		v = tonumber(s['volume'])
 		v = math.max(0,v - 5 * piepan.countsubstring(msg.text,'-'))
-		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=v})
+		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=v})
 		-- client:set_vol(v)
 		-- piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(v) .. "%" .. msg_suffix)
 	elseif(msg.text:starts('#xfade ')) then
@@ -1040,12 +968,12 @@ function piepan.onMessage(msg)
 	elseif("shuffle" == c) then
 		mpd_client:shuffle()
                 piepan.me.channel:send("Ok")
-	elseif("youtube" == c) then
+	elseif("y" == c or "youtube" == c) then
 		piepan.Thread.new(piepan.youtubedl,piepan.youtubedl_completed ,{url = msg.text, user = msg.user.name})
 	elseif("testfade" == c) then
-		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=nil,trans={"fade20","fadeback"}})
+		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,trans={"fade20","fadeback"}})
 	elseif("jingle1" == c) then
-		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=nil,
+		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,
                         trans={"fade10","jingleradio_batard","fadeback"}})
 	elseif("ninjanext" == c) then
 		piepan.Thread.new(piepan.fadevol,piepan.fadevol_completed,{dest=nil,
@@ -1134,12 +1062,12 @@ function piepan.onMessage(msg)
 		s = s .. "<li>#disablej : désactive les jingles pendant 5 minutes</li>"
 		s = s .. "</ul></pre>"
 		piepan.me.channel:send(s)
-	elseif("volume" == c) then
+	elseif("v" == c or "volume" == c) then
 		s = mpd_client:status()
 		piepan.me.channel:send(msg_prefix .. "Volume : " .. tostring(s['volume']) .. "%" .. msg_suffix)
-	elseif ("song" == c) then
+	elseif ("s" == c or "song" == c) then
 		piepan.send_song_infos()
 	end
 	-- client:close()
-    end
+    -- end
 end
