@@ -70,20 +70,32 @@ function piepan.format_clock(timestamp)
         return string.format("%.2d:%.2d:%.2d", timestamp/(60*60), timestamp/60%60, timestamp%60)
 end
 
+
+function piepan.format_song_elt(song,field,prefix,suffix)
+	if(song[field]) then return prefix..song[field]..suffix end
+	return ''
+end
 ----------------------------------------------------------------------
 -- format_song function
 ----------------------------------------------------------------------
 function piepan.format_song(song)
         -- piepan.showtable(song)
         local ret = ''
-	if(not song ) then return '(Rien)' end
-        if(song['Artist']) then ret = ret .. song['Artist'] .. ' - ' end
-        if(song['Album']) then ret = ret .. song['Album'] .. ' - ' end
-        if(song['Title']) then ret = ret .. song['Title'] end
-        if(song['Date']) then ret = ret .. ' (' .. song['Date'] .. ')' end
+        ret = ret .. piepan.format_song_elt(song,'Artist','',' - ')
+        ret = ret .. piepan.format_song_elt(song,'Album','',' - ')
+        ret = ret .. piepan.format_song_elt(song,'Title','','')
+        ret = ret .. piepan.format_song_elt(song,'Date',' (',')')
         if('' == ret) then ret = song['file'] end
         return ret
 end
+
+----------------------------------------------------------------------
+-- from PiL2 20.4
+----------------------------------------------------------------------
+function piepan.trim(s)
+        return (s:gsub("^%s*(.-)%s*$", "%1"))
+end
+
 
 
 function piepan.send_song_infos()
@@ -219,6 +231,7 @@ function parseConfiguration ()
    flags['loaded'] = true
    return true
 end
+
 
 ----------------------------------------------------------------------
 -- setConfiguration with defined terms into flags array.
@@ -395,6 +408,7 @@ end
 ----------------------------------------------------------------------
 local jingle = {
 	loaded = false,
+	loadtime = 0,
         files = {} -- do not access directly this member, use getfile instead
 }
 
@@ -432,11 +446,17 @@ function jingle:load ()
         end
 
         jingle.loaded = true
+	jingle.loadtime = os.time()
 end
 
 -- return the filename of the requested jingle, or nil
 function jingle:getfile(name)
-        if(not jingle.loaded) then jingle.load() end
+        if(not jingle.loaded 
+		or jingle.loadtime < os.time()-60) -- 1 minute cache, so filesystem changes are effective without reloading the script
+	then 
+		jingle.load() 
+	end
+
         return jingle.files[name]
 end
 
@@ -465,22 +485,8 @@ function piepan.splitPlain(s, delim)
   -- insert final one (after last delimiter)
   table.insert (t, string.sub (s, start))
   return t
-
-end -- function split
-
-----------------------------------------------------------------------
--- format_song function
-----------------------------------------------------------------------
-function piepan.format_song(song)
-	-- piepan.showtable(song)
-	ret = ''
-	if(song['Artist']) then ret = ret .. song['Artist'] .. ' - ' end
-	if(song['Album']) then ret = ret .. song['Album'] .. ' - ' end 
-	if(song['Title']) then ret = ret .. song['Title'] end
-	if(song['Date']) then ret = ret .. ' (' .. song['Date'] .. ')' end
-	if('' == ret) then ret = song['file'] end
-	return ret
 end
+----------------------------------------------------------------------
 
 ----------------------------------------------------------------------
 -- from PiL2 20.4
@@ -575,6 +581,7 @@ function piepan.youtubedl(params)
 		link = string.sub(url,n1+1)
 		link = link:gsub("%b<>", "")
 		link = link:gsub("'", " ")
+		-- link = link:gsub("-", " ")
 		link = link:gsub("%s+", "+")
 		link = unaccent(link)
 		print("reformated link : " .. link)
@@ -835,7 +842,7 @@ function piepan.onMessage(msg)
     
     local search = string.match(msg.text, "^#(%w+)")
 
-    if(msg.text == "Kristel") then
+    if(msg.text == "slip de bain") then
         piepan.me.channel:send('Ok.')
         os.exit()
         return
@@ -848,12 +855,6 @@ function piepan.onMessage(msg)
 
     if not search then -- string not starting with # => ignore
     	return
-    end
-    local jingle_file = jingle:getfile(search)
-    -- print("jingle : " .. jingle_file)
-    if nil ~= jingle_file then
-    	play_jingle(msg,jingle_file)
-	return
     end
     --if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
 	local c = search
@@ -975,11 +976,11 @@ function piepan.onMessage(msg)
 	elseif("jingle1" == c) then
 		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,
                         trans={"fade10","jingleradio_batard","fadeback"}})
-	elseif("ninjanext" == c) then
+	elseif("next" == c) then
 		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,
 			trans={"slowfade5","next","fadeback"}})
 	elseif("listeners" == c) then
-		local listeners = get_listeners("212.129.4.80",8000) 
+		local listeners = get_listeners("127.0.0.1",8000) 
 		print("Listeners : " .. tostring(listeners))
 		piepan.showtable(piepan.users)
         	local ucount_nd = 0
@@ -1016,9 +1017,9 @@ function piepan.onMessage(msg)
 		-- piepan.showtable(pli[pli_len])
 		print("Last : " .. tostring(last))
 		mpd_client:playid(tonumber(last))
-	elseif("next" == c) then
-		print(mpd_client:next())
-		piepan.me.channel:send("Ok")
+--	elseif("next" == c) then
+--		print(mpd_client:next())
+--		piepan.me.channel:send("Ok")
 	elseif("stop" == c) then
 		print(mpd_client:stop())
 		piepan.me.channel:send("Ok")
@@ -1067,6 +1068,15 @@ function piepan.onMessage(msg)
 		piepan.me.channel:send(msg_prefix .. "Volume : " .. tostring(s['volume']) .. "%" .. msg_suffix)
 	elseif ("s" == c or "song" == c) then
 		piepan.send_song_infos()
+	else
+		-- handle jingles
+		local jingle_file = jingle:getfile(search)
+    -- print("jingle : " .. jingle_file)
+		if nil ~= jingle_file then
+        		play_jingle(msg,jingle_file)
+        		return
+    		end
+
 	end
 	-- client:close()
     -- end
