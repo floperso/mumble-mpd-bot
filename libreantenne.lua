@@ -65,6 +65,116 @@ local jingles_path = "jingles/"
 local mpd_connect = mpd_connect
 
 
+-- module utf8 -- some code from here : https://github.com/alexander-yakushev/awesompd/blob/master/utf8.lua
+-- returns the number of bytes used by the UTF-8 character at byte i in s
+-- also doubles as a UTF-8 character validator
+
+local utf8 = {}
+
+function utf8.charbytes (s, i)
+   -- argument defaults
+   i = i or 1
+   local c = string.byte(s, i)
+   
+   -- determine bytes needed for character, based on RFC 3629
+   if c > 0 and c <= 127 then
+      -- UTF8-1
+      return 1
+   elseif c >= 194 and c <= 223 then
+      -- UTF8-2
+      -- local c2 = string.byte(s, i + 1)
+      return 2
+   elseif c >= 224 and c <= 239 then
+      -- UTF8-3
+      -- local c2 = s:byte(i + 1)
+      -- local c3 = s:byte(i + 2)
+      return 3
+   elseif c >= 240 and c <= 244 then
+      -- UTF8-4
+      -- local c2 = s:byte(i + 1)
+      -- local c3 = s:byte(i + 2)
+      -- local c4 = s:byte(i + 3)
+      return 4
+   end
+end
+-- returns the number of characters in a UTF-8 string
+function utf8.len (s)
+   local pos = 1
+   local bytes = string.len(s)
+   local len = 0
+   
+   while pos <= bytes and len ~= chars do
+      local c = string.byte(s,pos)
+      len = len + 1
+      
+      pos = pos + utf8.charbytes(s, pos)
+   end
+   
+   if chars ~= nil then
+      return pos - 1
+   end
+   
+   return len
+end
+
+
+-- initialize the translation table 
+function utf8.init ()
+	local unaccent_from, unaccent_to =
+   "ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöøùúûüý",
+   "AAAAAACEEEEIIIINOOOOOOUUUUYaaaaaaceeeeiiiinoooooouuuuy"
+
+        utf8.unaccent_table = {}
+        local i,j = 1,1
+        local bytelen = string.len(unaccent_from)
+
+        while(i<=bytelen) do
+		-- calculate the size of the utf8 byte chunk
+                local size = utf8.charbytes(unaccent_from,i) or 1
+		-- extract required bytes
+                local from = string.sub(unaccent_from,i,i+size-1)
+		
+                local to = string.sub(unaccent_to, j, j)
+
+                utf8.unaccent_table[from] = to
+
+                i = i + size
+                j = j + 1
+        end
+end
+
+-- replace accents from a string according to the unaccent_table
+function utf8.unaccent(str)
+	
+	if not utf8.unaccent_table then
+		utf8.init()
+	end
+
+	local ret = ""
+	local len = string.len(str)
+	local i = 1
+	while(i<=len) do
+		local size = utf8.charbytes(str,i) or 1
+		local from = string.sub(str,i,i+size-1)
+		local to = utf8.unaccent_table[from] or from
+		ret = ret .. to
+		i = i + size
+	end
+	return ret
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
 function piepan.format_clock(timestamp)
         local timestamp = tonumber(timestamp)
         return string.format("%.2d:%.2d:%.2d", timestamp/(60*60), timestamp/60%60, timestamp%60)
@@ -509,26 +619,6 @@ function piepan.url_encode(str)
 end
 
 ----------------------------------------------------------------------
--- function unaccent : replace accents from strings
-----------------------------------------------------------------------
-local translatechars = function (str, re, tbl)
-     return (string.gsub(str, re, function (c) return tbl[c] or c end))
-   end
-
-function unaccent(str)
-	unaccent_from, unaccent_to =
-   "ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöøùúûüý",
-   "AAAAAACEEEEIIIINOOOOOOUUUUYaaaaaaceeeeiiiinoooooouuuuy"
-
-	unaccent_table = {}
-	for i = 1,string.len(unaccent_from) do
-		unaccent_table[string.sub(unaccent_from, i, i)] =
-		string.sub(unaccent_to, i, i)
-	end
-	unaccent_re = "([\192-\254])"
-	return translatechars(str, unaccent_re, unaccent_table)
-end
-----------------------------------------------------------------------
 -- function show tables
 ----------------------------------------------------------------------
 function piepan.showtable(t)
@@ -583,11 +673,11 @@ function piepan.youtubedl(params)
 		link = link:gsub("'", " ")
 		-- link = link:gsub("-", " ")
 		link = link:gsub("%s+", "+")
-		link = unaccent(link)
+		link = utf8.unaccent(link)
 		print("reformated link : " .. link)
 		piepan.me.channel:send('# ' .. msg_prefix .. "Chargement en cours : [" .. link .. "] ..." .. msg_suffix)
-		print("Loading [" .. link .. "] ...")
-		local file = assert(io.popen('./yt_dl.sh '.. user .. ' ' .. link, 'r'))
+		print("Loading @".. user .." [" .. link .. "] ...")
+		local file = assert(io.popen('./yt_dl.sh "'.. user .. '" "' .. link ..'"', 'r'))
 		local output = file:read('*all')
 		file:close()
 		print(output)
@@ -597,7 +687,7 @@ function piepan.youtubedl(params)
 			if(n3) then
 				file = piepan.trim(string.sub(output,n2,n3))
 				print("Found : [" .. file .. "]")
-				piepan.me.channel:send('# ' .. msg_prefix .. "Téléchargement terminé : " .. file .. msg_suffix)
+				-- piepan.me.channel:send('# ' .. msg_prefix .. "Téléchargement terminé : " .. file .. msg_suffix)
 				mpd_client:update('download')
 				-- client:idle('download')
 				-- socket.sleep(5)
@@ -607,6 +697,7 @@ function piepan.youtubedl(params)
 				print(mpd_client:sendrecv("add " .. uri))
 				-- client:add("download/" .. file)
 				print("Adding : [" .. uri .. "]")
+				piepan.me.channel:send('# ' .. msg_prefix .. "Téléchargement terminé : " .. file .. msg_suffix)
 				-- piepan.me.channel:send(msg_prefix .. "Morceau ajouté à la liste." .. msg_suffix)
 			else
 				print("Failed to find EOL")
@@ -828,17 +919,25 @@ function piepan.onMessage(msg)
     if msg.user == nil then
         return
     end
+
+    if require_registered and msg.user.userId == nil then
+        msg.user:send("Vous devez vous enregistrer pour envoyer des commandes.")
+        return
+    end
+
+
+
     --[[ if g_bans[msg.user.name] then
     	msg.user:send("You have been banned.")
 	return
     end
     --]]
-
+    
     print(msg.user.name .. "> " .. msg.text) 
     
     msg.text = msg.text:gsub("<p.->(.-)</p>","%1")
 
-    print("reformated : [" .. msg.text .. "]") 
+    -- print("reformated : [" .. msg.text .. "]") 
     
     local search = string.match(msg.text, "^#(%w+)")
 
@@ -858,10 +957,6 @@ function piepan.onMessage(msg)
     end
     --if(commands[search] or msg.text:starts('#v+') or msg.text:starts('#v-')) then
 	local c = search
-	if require_registered and msg.user.userId == nil then
-		msg.user:send("Vous devez vous enregistrer pour envoyer des commandes.")
-		return
-	end
 
 	-- we may have lost the connection since the initial auth	
 	
@@ -871,6 +966,7 @@ function piepan.onMessage(msg)
 		mpd_client.loaded = true
 	end
 	
+
 	if not flags['loaded'] then
 		print("Reloading configuration ...")
 		parseConfiguration()
@@ -889,6 +985,16 @@ function piepan.onMessage(msg)
 		vol = math.max(0,math.min(100,vol))
 		print(mpd_client:set_vol(vol))
 		piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
+	elseif("trash" == c) then
+		song = mpd_client:currentsong()
+		print("trash: Currently playing " .. song['file'])
+		if(string.starts(song['file'],'download')) then
+			ret = assert(io.popen('rm -f "./' .. song['file'] ..'"' , 'r'), "failed to remove file")
+			piepan.me.channel:send(msg_prefix .. "Fichier supprim&eacute;." .. msg_suffix)
+		else
+			piepan.me.channel:send(msg_prefix .. "Cela ne fonctionne que pour les fichiers situ&eacute;s dans download ou download-keep." .. msg_suffix)
+		end
+
 	elseif("keep" == c) then
 		song = mpd_client:currentsong()
 		print("keep: Currently playing " .. song['file'])
@@ -978,8 +1084,8 @@ function piepan.onMessage(msg)
                         trans={"fade10","jingleradio_batard","fadeback"}})
 	elseif("next" == c) then
 		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,
-			trans={"slowfade5","next","fadeback"}})
-	elseif("listeners" == c) then
+			trans={"slowfade0","next","fastfadeback"}})
+	elseif("listeners" == c or "l" == c) then
 		local listeners = get_listeners("127.0.0.1",8000) 
 		print("Listeners : " .. tostring(listeners))
 		piepan.showtable(piepan.users)
@@ -1022,7 +1128,7 @@ function piepan.onMessage(msg)
 --		piepan.me.channel:send("Ok")
 	elseif("stop" == c) then
 		print(mpd_client:stop())
-		piepan.me.channel:send("Ok")
+		piepan.me.channel:send("# Ok")
 	elseif("play" == c) then
 		-- print(client:pause(false))
 		
@@ -1033,20 +1139,20 @@ function piepan.onMessage(msg)
 			pli = mpd_client:playlistinfo()
 			if piepan.tablelength(pli)>0 then
 				print(mpd_client:playid(tonumber(pli[1]['Id'])))
-				piepan.me.channel:send("Ok")
+				piepan.me.channel:send("# Ok")
 			else
 				piepan.me.channel:send("Playlist vide.")
 			end
 		else
 			print(mpd_client:unpause())
-			piepan.me.channel:send("Ok")
+			piepan.me.channel:send("# Ok")
 		end
 	elseif("pause" == c) then
 		print(mpd_client:pause(true))
-		piepan.me.channel:send("Ok")
+		piepan.me.channel:send("# Ok")
 	elseif("prev" == c) then
 		print(mpd_client:previous())
-		piepan.me.channel:send("Ok")
+		piepan.me.channel:send("# Ok")
 	elseif("help" == c) then
 		s = msg_prefix .. "<b>Commandes</b>" .. msg_suffix
 		s = s .. "<pre style='color:#777'><ul>"
