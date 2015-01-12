@@ -165,6 +165,28 @@ end
 
 
 
+function piepan.progress(val)
+
+	print("progress " .. tostring(val))
+        local ret = ''
+        local maxc = 10
+        local count = 0
+        local inf = 1
+        while count<100 do
+                if(count < val) then
+                        ret = ret .. '='
+                else
+                        if(1 == inf) then
+                                ret = ret .. '>'
+                        else
+                                ret = ret .. '_'
+                        end
+                        inf = 0
+                end
+                count = count + 100/maxc
+        end
+        return '[' .. ret .. ']'
+end
 
 
 
@@ -217,18 +239,28 @@ function piepan.send_song_infos()
         local song = mpd_client:currentsong()
         local status = mpd_client:status()
         -- print("Volume : " .. status['volume'])
-        -- piepan.showtable(s)
+        piepan.showtable(status)
+        piepan.showtable(song)
+
         local tstr = ''
+	local tprogress = ''
         if(status['time']) then
         	time_pair = piepan.splitPlain(status['time'],':')
                 -- print("Time : " .. status['time'] .. tostring(time_pair[1]))
+--		if (tonumber(time_pair[2])>0 and tonumber(time_pair[1])>0) then
+--			tprogress = ' <span style="font-family:monospace">' .. piepan.progress((tonumber(time_pair[1]) * 100) / tonumber(time_pair[2])) .. "</span>"
+--		end
                 tstr = '[' .. piepan.format_clock(time_pair[1])
                 tstr = tstr .. ' / ' .. piepan.format_clock(time_pair[2]) .. ']'
         end
         local summary = piepan.format_song(song) or ''
-
-        local ret = summary .. ' - ' .. tstr .. ' [vol ' .. tostring(status['volume'] or '?') .. '% R' .. (status['random'] or '?') .. ' C' .. (status['consume'] or '?') .. ']'
+	local ret
+	if (status['state'] == 'play') then
+        	ret = summary .. ' - ' .. tstr .. tprogress .. ' [vol ' .. tostring(status['volume'] or '?') .. '% R' .. (status['random'] or '?') .. ' C' .. status['consume'] .. ' S' .. status['single'] .. ']'
                 -- msg.user:send(ret)
+	else
+		ret = "<span style='color:#f66'>rien</span>"
+	end
         print("Summary : " .. ret)
         piepan.me.channel:send(msg_prefix .. "Lecture en cours : " .. ret .. msg_suffix)
 end
@@ -478,18 +510,16 @@ function get_listeners(server, port)
       return -1
    end
 
-   -- local UNIX commands
-   local curl_command="/usr/bin/curl --silent http://"..server..":"..port
-   -- grep_command="/bin/grep -r 'Current Listeners' -A1"
-   local grep_command="/bin/grep 'Current Listeners' -A1"
-   local get_command=curl_command.."|"..grep_command
 
-   print("get_command : " .. get_command)
+	-- http://admin:librefm@stream.libreantenne.org:8000/admin/stats
+   -- local UNIX commands
+   local curl_command="/usr/bin/curl --silent http://admin:librefm@"..server..":"..port.."/admin/stats"
+
    -- open pipe and execute get_command
-   local listeners = assert(io.popen(get_command, 'r'), "pipe error")
+   local listeners = assert(io.popen(curl_command, 'r'), "pipe error")
    -- define 2 "random" string and init buf
-   local _start="GOdwkg##"
-   local _end="==AHbewA"
+   ---al _start="GOdwkg##"
+   --local _end="==AHbewA"
    local buf=0
 
    -- if listeners is not empty
@@ -499,22 +529,26 @@ function get_listeners(server, port)
       -- read all command output line by line
       for line in listeners:lines()
       do
-	 
-	 -- if line match with streamdata...
-	 if (string.match(line, "streamdata"))
-	 then
+	-- print("listeners line : " .. line)
+	local start = 1
+	while true do
+	 	-- <listeners>0</listeners>
 
-	    -- ...parse it...
-	    local s=string.gsub(line, "%d+", _start.."%1".._end)
-	    s=string.gsub(s, ".*".._start, "")
-	    s=string.gsub(s, _end..".*", "")
-	    
-	    -- ...and generate sum of listeners
-	    if (string.match(s,"%d"))
-	    then
-	       buf=buf+tonumber(s)
-	    end
-	 end
+		local n1,n2 = string.find(line,'<listeners>',start,true)	 
+	 -- if line match with streamdata...
+		print("n1 = "..tostring(n1))
+	 	if n1 then
+			start = n2
+			local n3,n4 = line:find('</listeners>',n2,true)
+			if n3 then
+				print("found this : [" .. line:sub(n2+1,n3-1) .. "]")
+				buf = buf + tonumber(line:sub(n2+1,n3-1))
+				break
+			end
+		 else
+			break
+		 end
+	end-- while
       end
 
       -- finaly, close pipe and return buf
@@ -525,6 +559,15 @@ function get_listeners(server, port)
       -- else return -1
       return -1
    end
+end
+function get_listeners2()
+        local file = io.open("/tmp/nblisteners", "r")
+        -- sets the default input file as test.lua
+        io.input(file)
+        -- prints the first line of the file
+        local ret = tonumber(io.read())
+        io.close(file)
+        return ret
 end
 
 ----------------------------------------------------------------------
@@ -721,7 +764,7 @@ function piepan.youtubedl(params)
 					print(mpd_client:sendrecv("add " .. uri))
 				-- client:add("download/" .. file)
 					print("Adding : [" .. uri .. "]")
-					piepan.me.channel:send('# ' .. msg_prefix .. "Téléchargement terminé : " .. file .. msg_suffix)
+					piepan.me.channel:send('# ' .. msg_prefix .. "<span style='color:#393;'>Téléchargement terminé : " .. file .. "</span>" .. msg_suffix)
 				
 					if(params["autoplay"] and true == params["autoplay"]) then
 						local status = mpd_client:status()
@@ -750,11 +793,11 @@ function piepan.youtubedl(params)
 			else -- n1 
 				n1, n2 = string.find(output,"[download] File is larger",nil,true)
 				if(n1) then
-					piepan.me.channel:send('# ' .. msg_prefix .. "Fichier trop volumineux (>70Mo)" .. msg_suffix)
+					piepan.me.channel:send('# ' .. msg_prefix .. "<span style='color:#f66;'>Fichier trop volumineux.</span>" .. msg_suffix)
 				else
 					if(found == 0) then -- nothing found
 						print("Failed to find '[avconv] Destination' in " .. output)
-						piepan.me.channel:send('# ' .. msg_prefix .. "Le téléchargement a merdé." .. msg_suffix)
+						piepan.me.channel:send('# ' .. msg_prefix .. "<span style='color:#f66;'>Le téléchargement a merdé.</span>" .. msg_suffix)
 					end
 				end
 				break
@@ -878,7 +921,15 @@ function mpd_transition(args)
                         elseif(t:starts("jingle")) then
                                 local jtype = string.sub(t,7)
                                 print("* JINGLE ["..jtype.."] *")
-				play_jingle(nil,jtype ..".ogg")
+				if string.find(jtype, " ") then
+					local jingles = piepan.splitPlain(jtype,' ')
+					for key,value in pairs(jingles) do
+						play_jingle(nil,value ..".ogg",true)
+					end
+				else
+					play_jingle(nil,jtype ..".ogg",false)
+				end
+
                         end
                 end
 
@@ -904,7 +955,7 @@ function piepan.trans_thread(params)
         local delta = 1
         -- print("fadevol vol = " .. tostring(vol))
         if(vol == dest) then
-                piepan.me.channel:send(msg_prefix .. "C'est déjà à " .. tostring(vol) .. "%, boulet." .. msg_suffix)
+                piepan.me.channel:send(msg_prefix .. "C'est déjà à " .. tostring(vol) .. "%, tête de mouche." .. msg_suffix)
 -- client:close()
                 return
         end
@@ -921,7 +972,7 @@ function piepan.trans_thread(params)
                 piepan.MPD.sleep(0.2)
         end
         -- client:close()
-        piepan.me.channel:send(msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
+        piepan.me.channel:send('# ' .. msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
         -- client = nil
         -- print("fadevol done.")
 end
@@ -934,8 +985,9 @@ function piepan.trans_thread_completed(info)
 end
 
 
-function play_jingle(msg,file)
-	
+function play_jingle(msg,file,wait)
+	file = file:gsub ("#", " ")
+	file = file:gsub("^%s*(.-)%s*$", "%1")	
 	print("play_jingle " .. file)
 	if(os.time()<disable_jingle_ts ) then
                 piepan.me.channel:send(msg_prefix .. "Jingles désactivés." .. msg_suffix)
@@ -960,6 +1012,32 @@ function play_jingle(msg,file)
 
 	print("Playing jingle ["..soundFile.."]")
         piepan.me.channel:play(soundFile)
+	if wait then 
+		local n = 0
+		while piepan.Audio.isPlaying() and n<3 do
+			piepan.MPD.sleep(0.2)
+			n = n + 0.2
+		end
+	end
+end
+-------------------------------------------------
+-- saparse
+-- parse a string like "#sa+++ blabla", and returns the count of "+" and the search term (blabla)
+-- note: "#sa test" will return 1,test
+-------------------------------------------------
+function saparse(term)
+        local count = 0
+        local i = 4
+        while(i <= #term) do
+                local c = term:sub(i,i)
+                if( '+' == c) then
+                        count = count + 1
+                else
+                        break
+                end
+                i = i + 1
+        end
+        return math.max(1,count), term:sub(i+1,#term)
 end
 
 
@@ -976,6 +1054,47 @@ function piepan.mpdsearchsingle(type,term)
 	end
 	return nil
 end
+
+function removeduplicates(t)
+	local hash = {}
+	local res = {}
+
+	for _,v in ipairs(t) do
+		if (not hash[v]) then
+			res[#res+1] = v 
+			hash[v] = true
+		end
+	end
+	return res
+end
+
+
+
+-- concatenate 2 tables
+function concattables(t1,t2)
+    for i=1,#t2 do
+        t1[#t1+1] = t2[i]
+    end
+    return removeduplicates(t1)
+end
+-- search multiple files in the database
+function piepan.mpdsearch(type,term,count)
+        local ret = mpd_client:search(type,'"' .. term .. '"')
+	local cnt = 0
+	local list = {}
+        if(ret) then
+                for key,value in pairs(ret) do
+                        if(value["file"]) then
+                                print("Found [".. term .."] using " .. type .. " : " .. value['file'])
+                                list[cnt+1] = value["file"]
+				cnt = cnt + 1
+				if cnt >= count then break end
+                        end
+                end
+        end
+        return list
+end
+
 ----------------------------------------------------------------------
 -- function onMessage
 ----------------------------------------------------------------------
@@ -1005,7 +1124,7 @@ function piepan.onMessage(msg)
     
     local search = string.match(msg.text, "^#(%w+)")
 
-    if(msg.text == "slip de bain") then
+    if(msg.text == "tahiti mouche") then
         piepan.me.channel:send('Ok.')
         os.exit()
         return
@@ -1045,18 +1164,26 @@ function piepan.onMessage(msg)
 	-- print(flags["mpd_server"] .. "  " .. tostring(flags["mpd_port"]))
 	-- client = piepan.MPD.mpd_connect(flags["mpd_server"],flags["mpd_port"],true)
 	if("setvol" == c) then
-		local vol = tonumber(string.sub(msg.text,8))
-		vol = math.max(0,math.min(100,vol))
-		local currentvol = tonumber(mpd_client:status()['volume'])
-		if(vol == currentvol) then
-	                piepan.me.channel:send(msg_prefix .. "C'est déjà à " .. tostring(vol) .. "%, boulet." .. msg_suffix)
+		print("fadevol " .. msg.text)
+                local vol = tonumber(string.sub(msg.text,9))
+                vol = math.max(0,math.min(100,vol))
+                -- piepan.fadevol(vol)
+                piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=vol})
+		-- piepan.me.channel:send(msg_prefix .. "Je ne fais plus de #setvol; je te fais un #fadevol à la place." .. msg_suffix)		
+
+
+--		local vol = tonumber(string.sub(msg.text,8))
+--		vol = math.max(0,math.min(100,vol))
+--		local currentvol = tonumber(mpd_client:status()['volume'])
+--		if(vol == currentvol) then
+--	                piepan.me.channel:send(msg_prefix .. "C'est déjà à " .. tostring(vol) .. "%, boulet." .. msg_suffix)
 -- client:close()
-        	        return
-        	end
+--        	        return
+--        	end
 
 
-		print(mpd_client:set_vol(vol))
-		piepan.me.channel:send("# " .. msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
+--		print(mpd_client:set_vol(vol))
+--		piepan.me.channel:send("# " .. msg_prefix .. "Volume ajusté à " .. tostring(vol) .. "%" .. msg_suffix)
 	elseif("trash" == c) then
 		local song = mpd_client:currentsong()
 		print("trash: Currently playing " .. song['file'])
@@ -1132,18 +1259,23 @@ function piepan.onMessage(msg)
 	elseif(msg.text:starts('#xfade ')) then
 		local val = tonumber(string.sub(msg.text,7))
 		val = math.max(0,math.min(10,val))
-		mpd_client:set_crossfade(val)
+		mpd_client:set_crossfade(1==val)
 		piepan.me.channel:send("# Ok")
 	elseif(msg.text:starts('#random ')) then
 		local val = tonumber(string.sub(msg.text,8))
 		val = math.max(0,math.min(1,val))
-		mpd_client:set_random(val)
+		mpd_client:set_random(1==val)
 		piepan.me.channel:send("# Ok")
 	elseif(msg.text:starts('#consume ')) then
 		local val = tonumber(string.sub(msg.text,9))
 		val = math.max(0,math.min(1,val))
-		mpd_client:set_consume(val)
+		mpd_client:set_consume(1==val)
 		piepan.me.channel:send("# Ok")
+	elseif(msg.text:starts('#single ')) then
+                local val = tonumber(string.sub(msg.text,8))
+                val = math.max(0,math.min(1,val))
+                mpd_client:set_single(1==val)
+                piepan.me.channel:send("# Ok")
 	elseif("shuffle" == c) then
 		mpd_client:shuffle()
                 piepan.me.channel:send("# Ok")
@@ -1157,12 +1289,13 @@ function piepan.onMessage(msg)
 		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,trans={"fade20","fadeback"}})
 	elseif(msg.text:starts('#j ') ) then
 		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,
-                        trans={"fade10","jingle" .. string.sub(msg.text,3),"fadeback"}})
+                        trans={"fastfade10","jingle" .. string.sub(msg.text,4),"fastfadeback"}})
 	elseif("next" == c) then
 		piepan.Thread.new(piepan.trans_thread,piepan.trans_thread_completed,{dest=nil,
 			trans={"slowfade0","next","fastfadeback"}})
 	elseif("listeners" == c or "l" == c) then
 		local listeners = get_listeners("127.0.0.1",8000) 
+		local listeners2 = get_listeners2() 
 		print("Listeners : " .. tostring(listeners))
 		piepan.showtable(piepan.users)
         	local ucount_nd = 0
@@ -1188,7 +1321,7 @@ function piepan.onMessage(msg)
 	        end
         	-- print("count : "..tostring(ucount) .. "/"..tostring(ucountt))
 	
-		piepan.me.channel:send("Nombre d'auditeurs : " .. tostring(listeners) .. " (flux).."  )
+		piepan.me.channel:send("Nombre d'auditeurs : " .. tostring(listeners) .. " sur icecast, ".. tostring(listeners2) .. " réels."  )
 		piepan.me.channel:send("Nombre d'animateurs : ".. tostring(ucount_nd) .. " non sourds, ".. tostring(ucount_nm).." non muets sur ".. tostring(ucountt)  .. "."  )
 		
 	elseif("last" == c) then
@@ -1266,18 +1399,21 @@ function piepan.onMessage(msg)
 		mpd_client:previous()
 		piepan.me.channel:send("# Ok")
 	elseif("help" == c) then
-		local s = msg_prefix .. "# <b>Commandes</b>" .. msg_suffix
+		local s = "# ".. msg_prefix .. "<b>Commandes</b>" .. msg_suffix
 		s = s .. "<pre style='color:#777'><ul>"
 		s = s .. "<li>#s : Affiche le morceau en cours de lecture</li>"
 		s = s .. "<li>#v : Affiche le volume actuel</li>"
 		s = s .. "<li>#y -lien- : Télécharge un morceau et l'ajoute à la playlist</li>"
+		s = s .. "<li>#sa[+] -texte- : Recherche des morceaux dans la base et les ajoute à la playlist</li>"
+		s = s .. "<li>#sl[+] -texte- : Recherche des morceaux dans la base et les affiche</li>"
+		s = s .. "<li>#rk[+] : Ajoute un ou plusieurs morceaux aléatoires à playlist (5 max)</li>"
 		s = s .. "<li>#setvol -volume- / #fadevol -volume- : Ajuste le volume à la valeur indiquée</li>"
-		s = s .. "<li>#v+ : Augmente le volume de 5% par '+'</li>"
-		s = s .. "<li>#v- : Diminue le volume de 5% par '-'</li>"
+		s = s .. "<li>#v+[+] : Augmente le volume de 5% par '+'</li>"
+		s = s .. "<li>#v-[-] : Diminue le volume de 5% par '-'</li>"
 		s = s .. "<li>#n : Affiche le prochain morceau</li>"
 		s = s .. "<li>#pl : Affiche un résumé de la liste de lecture</li>"
 		s = s .. "<li>#next, #last, #first, #prev, #play, #pause : Contrôles de lecture</li>"
-		s = s .. "<li>#random 0/1, #consume 0/1, #xfade 0..N : Change les modes de lecture</li>"
+		s = s .. "<li>#random 0/1, #consume 0/1, #single 0/1, #xfade 0..N : Change les modes de lecture</li>"
 		s = s .. "<li>#keep : copie le fichier en cours de lecture dans un repertoire non temporaire</li>"
 		s = s .. "<li>#shuffle : mélange la playlist</li>"
 		s = s .. "<li>#disablej : désactive les jingles pendant 5 minutes</li>"
@@ -1286,46 +1422,110 @@ function piepan.onMessage(msg)
 	elseif("v" == c or "volume" == c) then
 		local s = mpd_client:status()
 		piepan.me.channel:send(msg_prefix .. "Volume : " .. tostring(s['volume']) .. "%" .. msg_suffix)
+	elseif (msg.text:starts("#rk")) then
+		print("RK+" .. tostring(piepan.countsubstring(msg.text,'+')))
+                local num = math.max(1,math.min(5,piepan.countsubstring(msg.text,'+')))
+                
+		local add_msg = "Morceau ajouté à la playlist : "
+		local f = assert(io.popen('find download-keep/* -type f | sort --random-sort | head -' .. tostring(num), 'r'))
+                
+		while true do
+      			local line = f:read()
+      			if line == nil then break end
+			local file = line
+		
+
+		--f:read("*all") -- eat data
+			print("random file : " .. file)
+			print(tostring(mpd_client:sendrecv('add "' .. file .. '"')))
+
+			piepan.me.channel:send('# ' .. msg_prefix .. add_msg .. tostring(file) .. msg_suffix)
+		end
+		f:read("*all")
+		f:close()
+
+		local status = mpd_client:status()
+                local song = mpd_client:currentsong()
+                if not song or not song['file'] or song['Pos'] == 0 then
+                         local pli = mpd_client:playlistinfo()
+                         local pli_len = piepan.tablelength(pli)
+                         if pli_len>0 then
+                                  -- local last = pli[pli_len]['Id']
+                                  print(mpd_client:playid(1)) -- play first song
+                         end
+                 else
+                        mpd_client:unpause()
+                 end
+
 	elseif ("s" == c or "song" == c) then
 		piepan.send_song_infos()
-	elseif (msg.text:starts("#sa ")) then
-		local search = string.sub(msg.text,5)
-		print("Searching [".. search .."]")
+	elseif (msg.text:starts("#sa+") or msg.text:starts("#sa ")) then
+		local sacnt,search
+		sacnt,search = saparse(msg.text)
+		-- local search = string.sub(msg.text,5)
+		print("Searching [".. search .."] "..tostring(sacnt).." items")
 		local add_msg = "Morceau ajouté à la playlist : "
-		local file = nil
-		if (not file) then file = piepan.mpdsearchsingle("Title",search) end 
-		if (not file) then file = piepan.mpdsearchsingle("filename",search) end 
-		if (not file) then file = piepan.mpdsearchsingle("Artist",search) end 
-		if (not file) then file = piepan.mpdsearchsingle("Name",search) end 
-		if (not file) then file = piepan.mpdsearchsingle("Album",search) end 
-		if (not file) then file = piepan.mpdsearchsingle("any",search) end
-			
+		local files = {}
+		local fcount = 0
+		if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("Title",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("filename",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("Artist",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("Name",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("Album",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("any",search,sacnt-#files)) end
+                	
 
-		if(file) then
-			print("add: " .. mpd_client:sendrecv('add "' .. file .. '"'))
-                        piepan.me.channel:send(msg_prefix .. add_msg .. tostring(file) .. msg_suffix)
+		if(piepan.tablelength(files) > 0) then
+			for i=1,#files do
+
+				print("add: " .. mpd_client:sendrecv('add "' .. files[i] .. '"'))
+                        	piepan.me.channel:send(msg_prefix .. add_msg .. tostring(files[i]) .. msg_suffix)
 			-- autoplay
-			local status = mpd_client:status()
-                        local song = mpd_client:currentsong()
-                        if not song or not song['file'] or song['Pos'] == 0 then
-                                local pli = mpd_client:playlistinfo()
-				local pli_len = piepan.tablelength(pli)
-                                if pli_len>0 then
-                        		local last = pli[pli_len]['Id']         
-			            	print(mpd_client:playid(tonumber(last)))
-                                end
-                        else
-                                 mpd_client:unpause()
-                        end
+				if i==#files then
+					local status = mpd_client:status()
+	        	                local song = mpd_client:currentsong()
+		                        if not song or not song['file'] or song['Pos'] == 0 then
+	                        	        local pli = mpd_client:playlistinfo()
+						local pli_len = piepan.tablelength(pli)
+	        	                        if pli_len>0 then
+		                        		local last = pli[pli_len]['Id']         
+				        	    	print(mpd_client:playid(tonumber(last)))
+	                        	        end
+	                	        else
+	        	                         mpd_client:unpause()
+		                        end
+				end
+			end
 		else
 			piepan.me.channel:send(msg_prefix .. "Aucun resultat." .. msg_suffix)
 		end
+	elseif (msg.text:starts("#sl+") or msg.text:starts("#sl ")) then
+                local sacnt,search
+                sacnt,search = saparse(msg.text)
+                -- local search = string.sub(msg.text,5)
+                print("Searching [".. search .."] "..tostring(sacnt).." items")
+                local files = {}
+                local fcount = 0
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("Title",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("filename",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("Artist",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("Name",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("Album",search,sacnt-#files)) end
+                if (#files < sacnt) then files = concattables(files,piepan.mpdsearch("any",search,sacnt-#files)) end
+
+
+                if(piepan.tablelength(files) > 0) then
+                        for i=1,#files do
+
+                                piepan.me.channel:send("# " .. msg_prefix .. tostring(files[i]) .. msg_suffix)
+       			end
+		end 
 	else
 		-- handle jingles
 		local jingle_file = jingle:getfile(search)
     -- print("jingle : " .. jingle_file)
 		if nil ~= jingle_file then
-        		play_jingle(msg,jingle_file)
+        		play_jingle(msg,jingle_file,false)
         		return
     		end
 
